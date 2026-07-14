@@ -1,0 +1,246 @@
+// BoonHRM — Applicant Tracking System
+// Provider: MySQL/MariaDB (Plesk-provisioned in prod; portable MariaDB locally).
+// Auth tables (User/Session/Account/Verification) follow Better Auth's schema
+// (email-OTP + admin plugin). They are hand-maintained here — do NOT run
+// `better-auth generate` blindly, as it would try to rewrite these models.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ---------------------------------------------------------------------------
+// Better Auth models
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // admin plugin fields
+  role       String    @default("hr") // "admin" | "hr"
+  banned     Boolean   @default(false)
+  banReason  String?   @db.Text
+  banExpires DateTime?
+
+  sessions Session[]
+  accounts Account[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?  @db.Text
+  userAgent String?  @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // admin plugin
+  impersonatedBy String?
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String    @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---------------------------------------------------------------------------
+// Domain enums
+// ---------------------------------------------------------------------------
+
+enum Stage {
+  POOL
+  INTERVIEW
+  SHORTLIST
+  REJECTED
+  APPROVED
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+}
+
+enum RejectionType {
+  CANDIDATE_DECLINED
+  COMPANY_REJECTED
+}
+
+enum MailType {
+  OTP
+  INTERVIEW_INVITE
+  REJECTION
+  APPROVAL
+  OTHER
+}
+
+enum MailDirection {
+  OUTBOUND
+  INBOUND
+}
+
+// ---------------------------------------------------------------------------
+// Domain models
+// Owner ids (createdById/movedById) are plain scalars, not FK relations to
+// User, to keep the Better-Auth-owned User model untouched.
+// ---------------------------------------------------------------------------
+
+model JobOpening {
+  id                   String     @id @default(cuid())
+  title                String
+  description          String?    @db.Text
+  location             String?
+  positions            Int        @default(1)
+  status               JobStatus  @default(OPEN)
+  onlineInterviewUrl   String?    @db.Text
+  inPersonInterviewUrl String?    @db.Text
+  autoNotify           Boolean    @default(true)
+  createdById          String?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  candidates Candidate[]
+
+  @@index([status])
+}
+
+model Candidate {
+  id           String  @id @default(cuid())
+  jobOpeningId String
+  jobOpening   JobOpening @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+
+  fullName String
+  email    String?
+  phone    String?
+  address  String? @db.Text
+
+  workHistory String? @db.Text // "last 2 jobs" — manual in V1, AI in V2
+  education   String? @db.Text // manual in V1, AI in V2
+
+  // Resume
+  resumeFilePath      String? @db.Text // private disk, outside webroot
+  resumeMime          String?
+  resumeOriginalName  String?
+  extractedResumeText String? @db.LongText
+  parsedEmail         String?
+  parsedPhone         String?
+
+  // Kanban state (server authoritative)
+  stage          Stage    @default(POOL)
+  stageEnteredAt DateTime @default(now())
+
+  // Rejection (captured at the moment of the move)
+  rejectionType   RejectionType?
+  rejectionReason String?        @db.Text
+  rejectedAt      DateTime?
+
+  // Approval
+  approvedAt DateTime?
+  ctcDetails String?   @db.Text // salary/CTC entered at approval
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stageHistory CandidateStageHistory[]
+  emailThread  EmailThread?
+
+  @@index([jobOpeningId, stage])
+  @@index([email])
+  @@index([createdAt]) // for the 75-day sweep
+}
+
+model CandidateStageHistory {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  fromStage       Stage?
+  toStage         Stage
+  movedById       String? // null = system (75-day auto-reject)
+  rejectionType   RejectionType?
+  rejectionReason String?        @db.Text
+  createdAt       DateTime       @default(now())
+
+  @@index([candidateId, createdAt])
+}
+
+model EmailThread {
+  id             String    @id @default(cuid())
+  candidateId    String    @unique
+  candidate      Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  conversationId String?   @unique // Graph thread id — stored in V1 for V2 threading
+  subject        String?
+  createdAt      DateTime  @default(now())
+
+  messages EmailMessage[]
+
+  @@index([conversationId])
+}
+
+model EmailMessage {
+  id            String      @id @default(cuid())
+  emailThreadId String
+  emailThread   EmailThread @relation(fields: [emailThreadId], references: [id], onDelete: Cascade)
+
+  direction MailDirection @default(OUTBOUND)
+  mailType  MailType
+
+  graphMessageId    String? @unique
+  conversationId    String?
+  internetMessageId String?
+  toAddresses       String? @db.Text
+  subject           String?
+  bodyHtml          String? @db.LongText
+  occurredAt        DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([emailThreadId, occurredAt])
+}
+
+// V2 will add: UnmatchedInboundEmail, SyncState (delta cursor),
+// DocumentUpload, UploadToken.

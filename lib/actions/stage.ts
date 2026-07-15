@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-helpers";
 import { sendStageEmail } from "@/lib/email/stage-emails";
+import { generateOfferToken, OFFER_TTL_DAYS } from "@/lib/offer";
 
 const moveSchema = z.object({
   candidateId: z.string().min(1),
@@ -16,6 +17,10 @@ const moveSchema = z.object({
   interviewUrlKind: z.enum(["online", "inPerson", "none"]).optional(),
   // Approval details (moving to APPROVED)
   ctcDetails: z.string().trim().max(4000).optional(),
+  dateOfJoining: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date of joining")
+    .optional(),
   sendEmail: z.boolean().optional(),
 });
 
@@ -36,6 +41,7 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
     rejectionReason,
     interviewUrlKind,
     ctcDetails,
+    dateOfJoining,
     sendEmail,
   } = parsed.data;
 
@@ -51,6 +57,9 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
   if (toStage === "REJECTED" && !rejectionType) {
     return { ok: false, error: "Rejection type is required" };
   }
+  if (toStage === "APPROVED" && !dateOfJoining) {
+    return { ok: false, error: "Date of joining is required" };
+  }
 
   await prisma.$transaction([
     prisma.candidate.update({
@@ -63,10 +72,23 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
         rejectionReason: toStage === "REJECTED" ? (rejectionReason ?? null) : null,
         rejectedAt: toStage === "REJECTED" ? new Date() : null,
         // Approval fields: set on entry; kept for the record on exit.
+        // Each approval mints a fresh 2-day offer link (invalidating any old
+        // one) and clears prior responses; dragging out of APPROVED kills the
+        // live link.
         ...(toStage === "APPROVED"
-          ? { approvedAt: new Date(), ctcDetails: ctcDetails ?? candidate.ctcDetails }
+          ? {
+              approvedAt: new Date(),
+              ctcDetails: ctcDetails ?? candidate.ctcDetails,
+              dateOfJoining: new Date(`${dateOfJoining}T00:00:00Z`),
+              offerToken: generateOfferToken(),
+              offerTokenExpiresAt: new Date(
+                Date.now() + OFFER_TTL_DAYS * 86_400_000,
+              ),
+              offerAcceptedAt: null,
+              offerDeclinedAt: null,
+            }
           : fromStage === "APPROVED"
-            ? { approvedAt: null }
+            ? { approvedAt: null, offerToken: null, offerTokenExpiresAt: null }
             : {}),
       },
     }),

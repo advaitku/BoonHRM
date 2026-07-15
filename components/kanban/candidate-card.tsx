@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Clock, FileText, Mail, Phone } from "lucide-react";
+import { Clock, FileText, Mail, MessageSquare, Phone } from "lucide-react";
 import type { BoardCandidate } from "@/components/kanban/board-types";
 import { daysSince } from "@/components/kanban/board-types";
+import { tagChipClass } from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
 
 export function CandidateCard({
@@ -70,9 +71,37 @@ export function CandidateCard({
               {candidate.phone}
             </p>
           )}
-          <p className="flex items-center gap-1 text-xs text-muted-foreground/80">
-            <Clock className="size-3 shrink-0" />
-            {days === 0 ? "Today" : `${days}d in stage`}
+          {candidate.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {candidate.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={tag.id}
+                  className={cn(
+                    "inline-flex border px-1.5 py-px text-[10px] font-medium leading-4",
+                    tagChipClass(tag.color),
+                  )}
+                >
+                  {tag.name}
+                </span>
+              ))}
+              {candidate.tags.length > 3 && (
+                <span className="inline-flex border bg-muted px-1.5 py-px text-[10px] font-medium leading-4 text-muted-foreground">
+                  +{candidate.tags.length - 3}
+                </span>
+              )}
+            </div>
+          )}
+          <p className="flex items-center gap-2 text-xs text-muted-foreground/80">
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-3 shrink-0" />
+              {days === 0 ? "Today" : `${days}d in stage`}
+            </span>
+            {candidate.commentCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="size-3 shrink-0" />
+                {candidate.commentCount}
+              </span>
+            )}
           </p>
         </div>
       </div>

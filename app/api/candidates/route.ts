@@ -54,6 +54,9 @@ export async function POST(request: Request) {
       fullName,
       email: extracted.email,
       phone: extracted.phone,
+      address: extracted.address,
+      workHistory: extracted.workHistory,
+      education: extracted.education,
       parsedEmail: extracted.email,
       parsedPhone: extracted.phone,
       extractedResumeText: extracted.text || null,
@@ -77,6 +80,9 @@ export async function POST(request: Request) {
     fullName,
     email: extracted.email,
     phone: extracted.phone,
+    address: extracted.address,
+    workHistory: Boolean(extracted.workHistory),
+    education: Boolean(extracted.education),
     extractedChars: extracted.text.length,
   });
 }

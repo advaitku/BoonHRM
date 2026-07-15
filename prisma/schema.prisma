@@ -176,9 +176,18 @@ model Candidate {
   rejectionReason String?        @db.Text
   rejectedAt      DateTime?
 
-  // Approval
-  approvedAt DateTime?
-  ctcDetails String?   @db.Text // salary/CTC entered at approval
+  // Approval / offer
+  approvedAt          DateTime?
+  ctcDetails          String?   @db.Text // salary/CTC entered at approval
+  dateOfJoining       DateTime? @db.Date // entered at approval, shown on the offer page
+  offerToken          String?   @unique // unguessable public offer-link token (base64url, 32 bytes)
+  offerTokenExpiresAt DateTime? // approvedAt + 2 days; expired offers sweep back to SHORTLIST
+  offerAcceptedAt     DateTime?
+  offerDeclinedAt     DateTime?
+  // Offer-page email OTP (proves inbox control before the offer unlocks)
+  offerOtpHash      String? // sha256(candidateId:code)
+  offerOtpExpiresAt DateTime?
+  offerOtpAttempts  Int       @default(0)
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -186,10 +195,44 @@ model Candidate {
 
   stageHistory CandidateStageHistory[]
   emailThread  EmailThread?
+  comments     CandidateComment[]
+  tags         CandidateTag[]
 
   @@index([jobOpeningId, stage])
   @@index([email])
   @@index([createdAt]) // for the 75-day sweep
+}
+
+model CandidateComment {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  authorId    String? // Better Auth user id (plain scalar, same pattern as movedById)
+  body        String    @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([candidateId, createdAt])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique // utf8mb4_unicode_ci -> case-insensitive uniqueness
+  color     String // palette key, assigned at creation (stable per tag)
+  createdAt DateTime @default(now())
+
+  candidates CandidateTag[]
+}
+
+model CandidateTag {
+  candidateId String
+  tagId       String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([candidateId, tagId])
+  @@index([tagId])
 }
 
 model CandidateStageHistory {
@@ -240,6 +283,24 @@ model EmailMessage {
 
   @@index([conversationId])
   @@index([emailThreadId, occurredAt])
+}
+
+// ---------------------------------------------------------------------------
+// Admin-editable settings
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key       String   @id // e.g. "companyName", "autoRejectDays"
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  type      MailType @unique // INTERVIEW_INVITE | REJECTION | APPROVAL
+  subject   String
+  body      String   @db.Text // plain text with {{placeholders}}
+  updatedAt DateTime @updatedAt
 }
 
 // V2 will add: UnmatchedInboundEmail, SyncState (delta cursor),

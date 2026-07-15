@@ -1,11 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { graphConfigured } from "@/lib/email/send";
-import { sendGraphMail } from "@/lib/email/graph-send";
-import {
-  approvalEmail,
-  interviewInviteEmail,
-  rejectionEmail,
-} from "@/lib/email/templates";
+import { mailConfigured, sendMail } from "@/lib/email/transport";
+import { renderCandidateEmail } from "@/lib/email/templates";
+import { offerUrl } from "@/lib/offer";
 import type {
   MailType,
   RejectionType,
@@ -53,18 +49,18 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
           ? opening.onlineInterviewUrl
           : opening.inPersonInterviewUrl;
       if (!url) return;
-      ({ subject, html } = interviewInviteEmail({
+      ({ subject, html } = await renderCandidateEmail("INTERVIEW_INVITE", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
-        url,
-        kind: input.interviewUrlKind,
+        interviewUrl: url,
+        interviewKind: input.interviewUrlKind,
       }));
       mailType = "INTERVIEW_INVITE";
       break;
     }
     case "REJECTED": {
       if (!opening.autoNotify) return;
-      ({ subject, html } = rejectionEmail({
+      ({ subject, html } = await renderCandidateEmail("REJECTION", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
       }));
@@ -73,10 +69,15 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
     }
     case "APPROVED": {
       if (input.explicitSend === false) return;
-      ({ subject, html } = approvalEmail({
+      if (!candidate.offerToken) return; // no live offer link, nothing to send
+      const url = offerUrl(candidate.offerToken);
+      if (!(await mailConfigured())) {
+        console.log(`\n[BoonHRM] (dev) offer link for ${candidate.fullName}: ${url}\n`);
+      }
+      ({ subject, html } = await renderCandidateEmail("APPROVAL", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
-        ctcDetails: input.ctcDetails ?? candidate.ctcDetails,
+        offerUrl: url,
       }));
       mailType = "APPROVAL";
       break;
@@ -95,9 +96,10 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
 }
 
 /**
- * Shared delivery: sends via Microsoft Graph when configured (dev: logs to the
- * console instead) and records an EmailMessage on the candidate's thread —
- * including the Graph conversationId, which V2 reply-threading matches on.
+ * Shared delivery: sends via the configured provider — Gmail/SMTP or Microsoft
+ * Graph (console in dev) — and records an EmailMessage on the candidate's
+ * thread. Graph additionally captures conversationId for V2 reply-threading;
+ * SMTP sends record the Message-ID header for the header-based fallback.
  */
 export async function deliverCandidateEmail(opts: {
   candidateId: string;
@@ -106,24 +108,11 @@ export async function deliverCandidateEmail(opts: {
   html: string;
   mailType: MailType;
 }): Promise<void> {
-  let graphMessageId: string | null = null;
-  let conversationId: string | null = null;
-  let internetMessageId: string | null = null;
-
-  if (graphConfigured()) {
-    const result = await sendGraphMail({
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-    });
-    graphMessageId = result.graphMessageId;
-    conversationId = result.conversationId;
-    internetMessageId = result.internetMessageId;
-  } else {
-    console.log(
-      `\n[BoonHRM] (dev) email "${opts.subject}" -> ${opts.to} (${opts.mailType}) — Graph not configured, not actually sent.\n`,
-    );
-  }
+  const { graphMessageId, conversationId, internetMessageId } = await sendMail({
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+  });
 
   const thread = await prisma.emailThread.upsert({
     where: { candidateId: opts.candidateId },

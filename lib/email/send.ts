@@ -1,15 +1,8 @@
-// Central email sender. In dev (no Graph credentials) everything prints to the
-// server console so login + notifications work without Microsoft 365.
-// M6 fleshes out the Microsoft Graph draft+send path and EmailMessage logging.
+// OTP delivery. When no mail provider is configured (local dev), the code is
+// printed to the server console instead — and captured for /api/dev/login.
+import { mailConfigured, sendMail } from "@/lib/email/transport";
 
-export function graphConfigured(): boolean {
-  return Boolean(
-    process.env.MS_TENANT_ID &&
-      process.env.MS_CLIENT_ID &&
-      process.env.MS_CLIENT_SECRET &&
-      process.env.CAREERS_MAILBOX,
-  );
-}
+export { mailConfigured, mailProvider } from "@/lib/email/transport";
 
 type OtpType =
   | "sign-in"
@@ -26,7 +19,7 @@ export async function sendOtpEmail({
   otp: string;
   type: OtpType;
 }): Promise<void> {
-  if (!graphConfigured()) {
+  if (!(await mailConfigured())) {
     console.log(
       `\n========================================\n[BoonHRM] OTP (${type}) for ${email}: ${otp}\n========================================\n`,
     );
@@ -36,10 +29,8 @@ export async function sendOtpEmail({
     }
     return;
   }
-  const [{ sendGraphMail }, { otpEmail }] = await Promise.all([
-    import("@/lib/email/graph-send"),
-    import("@/lib/email/templates"),
-  ]);
-  const { subject, html } = otpEmail(otp);
-  await sendGraphMail({ to: email, subject, html });
+
+  const { otpEmail } = await import("@/lib/email/templates");
+  const { subject, html } = await otpEmail(otp);
+  await sendMail({ to: email, subject, html });
 }

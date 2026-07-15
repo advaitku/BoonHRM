@@ -9,6 +9,8 @@ export interface BoardCandidate {
   stageEnteredAt: string; // ISO
   hasResume: boolean;
   rejectionType: RejectionType | null;
+  tags: { id: string; name: string; color: string }[];
+  commentCount: number;
 }
 
 export interface BoardOpening {

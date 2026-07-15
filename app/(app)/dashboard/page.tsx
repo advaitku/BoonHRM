@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
+import { getAutoRejectDays } from "@/lib/settings";
 import { ALL_STAGES, STAGE_ACCENTS, STAGE_LABELS } from "@/lib/stages";
 import type { Stage } from "@/lib/generated/prisma/enums";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StageBadge } from "@/components/candidates/stage-badge";
+import {
+  PipelineChart,
+  type PipelinePoint,
+} from "@/components/dashboard/pipeline-chart";
 import { cn } from "@/lib/utils";
-
-const AUTO_REJECT_DAYS = Number(process.env.AUTO_REJECT_DAYS || 75);
 
 export default async function DashboardPage({
   searchParams,
@@ -28,26 +31,51 @@ export default async function DashboardPage({
   const session = await requireUser();
   const { q } = await searchParams;
   const query = q?.trim() || "";
+  const autoRejectDays = await getAutoRejectDays();
 
   const warnCutoff = new Date(
-    Date.now() - (AUTO_REJECT_DAYS - 14) * 86_400_000,
+    Date.now() - Math.max(1, autoRejectDays - 14) * 86_400_000,
   );
+  const chartStart = startOfWeek(new Date(Date.now() - 11 * 7 * 86_400_000));
 
-  const [openOpenings, activePipeline, inInterview, approvedTotal, nearingAutoReject] =
-    await Promise.all([
-      prisma.jobOpening.count({ where: { status: "OPEN" } }),
-      prisma.candidate.count({
-        where: { stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] } },
-      }),
-      prisma.candidate.count({ where: { stage: "INTERVIEW" } }),
-      prisma.candidate.count({ where: { stage: "APPROVED" } }),
-      prisma.candidate.count({
-        where: {
-          stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] },
-          createdAt: { lt: warnCutoff },
-        },
-      }),
-    ]);
+  const [
+    openOpenings,
+    activePipeline,
+    inInterview,
+    approvedTotal,
+    nearingAutoReject,
+    recentCandidates,
+    recentRejections,
+  ] = await Promise.all([
+    prisma.jobOpening.count({ where: { status: "OPEN" } }),
+    prisma.candidate.count({
+      where: { stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] } },
+    }),
+    prisma.candidate.count({ where: { stage: "INTERVIEW" } }),
+    prisma.candidate.count({ where: { stage: "APPROVED" } }),
+    prisma.candidate.count({
+      where: {
+        stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] },
+        createdAt: { lt: warnCutoff },
+      },
+    }),
+    prisma.candidate.findMany({
+      where: { createdAt: { gte: chartStart } },
+      select: { createdAt: true },
+    }),
+    prisma.candidate.findMany({
+      where: { rejectedAt: { gte: chartStart } },
+      select: { rejectedAt: true },
+    }),
+  ]);
+
+  const chartData = buildWeeklySeries(
+    chartStart,
+    recentCandidates.map((c) => c.createdAt),
+    recentRejections
+      .map((c) => c.rejectedAt)
+      .filter((d): d is Date => Boolean(d)),
+  );
 
   const results = query
     ? await prisma.candidate.findMany({
@@ -74,8 +102,8 @@ export default async function DashboardPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Hi, {session.user.name.split(" ")[0]} 👋
+        <h1 className="text-2xl font-semibold">
+          Hi, {session.user.name.split(" ")[0]}
         </h1>
         <p className="text-muted-foreground">
           Here&apos;s what&apos;s happening across your hiring pipeline.
@@ -150,35 +178,27 @@ export default async function DashboardPage({
               value={activePipeline}
               hint="in Pool, Interview or Shortlist"
             />
-            <MetricCard
-              icon={Video}
-              label="In interview"
-              value={inInterview}
-            />
-            <MetricCard
-              icon={CheckCircle2}
-              label="Approved"
-              value={approvedTotal}
-            />
+            <MetricCard icon={Video} label="In interview" value={inInterview} />
+            <MetricCard icon={CheckCircle2} label="Approved" value={approvedTotal} />
           </div>
 
           {nearingAutoReject > 0 && (
-            <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <div className="flex items-center gap-3 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
               <AlertTriangle className="size-4 shrink-0" />
               <span>
                 <strong>{nearingAutoReject}</strong> candidate(s) have been in the
-                pipeline for over {AUTO_REJECT_DAYS - 14} days and will be
-                auto-rejected at {AUTO_REJECT_DAYS} days.
+                pipeline for over {Math.max(1, autoRejectDays - 14)} days and will
+                be auto-rejected at {autoRejectDays} days.
               </span>
             </div>
           )}
 
+          <PipelineChart data={chartData} />
+
           {/* Open openings overview */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">
-                Current openings
-              </h2>
+              <h2 className="text-lg font-semibold">Current openings</h2>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/job-openings">View all</Link>
               </Button>
@@ -278,9 +298,13 @@ function MetricCard({
   href?: string;
 }) {
   const body = (
-    <Card className={cn(href && "h-full transition-all hover:-translate-y-0.5 hover:shadow-md")}>
+    <Card
+      className={cn(
+        href && "h-full transition-all hover:-translate-y-0.5 hover:shadow-md",
+      )}
+    >
       <CardContent className="flex items-center gap-4 pt-6">
-        <div className="rounded-lg bg-muted p-2.5">
+        <div className="bg-muted p-2.5">
           <Icon className="size-5 text-muted-foreground" />
         </div>
         <div>
@@ -301,4 +325,31 @@ function countByStage(stages: Stage[]): Record<Stage, number> {
   >;
   for (const s of stages) counts[s]++;
   return counts;
+}
+
+function startOfWeek(d: Date): Date {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7; // Monday = 0
+  date.setDate(date.getDate() - day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function buildWeeklySeries(
+  start: Date,
+  added: Date[],
+  rejected: Date[],
+): PipelinePoint[] {
+  const fmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+  const weeks: PipelinePoint[] = [];
+  for (let i = 0; i < 12; i++) {
+    const weekStart = new Date(start.getTime() + i * 7 * 86_400_000);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+    weeks.push({
+      week: fmt.format(weekStart),
+      added: added.filter((d) => d >= weekStart && d < weekEnd).length,
+      rejected: rejected.filter((d) => d >= weekStart && d < weekEnd).length,
+    });
+  }
+  return weeks;
 }

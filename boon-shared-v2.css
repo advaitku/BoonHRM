@@ -1,0 +1,311 @@
+/* ============================================================
+   BOON — SHARED DESIGN SYSTEM (2026 Rebrand) — v2
+   Upload to: helloboon.com/wp-content/uploads/2026/04/boon-shared-v2.css
+   Reference: <link rel="stylesheet" href="https://helloboon.com/wp-content/uploads/2026/04/boon-shared-v2.css">
+
+   v2 changes (fonts only — all tokens identical to v1):
+   - No Google Fonts @import: fonts are self-hosted woff2, cutting the
+     render chain from 4 hops to 2 and one origin.
+   - Real weights: DM Sans (variable) now serves font-weight 300/500/600/700
+     under the 'PolySans Trial' family name. The trial OTF has a single 400
+     face, so 500/600 used to collapse to regular and 700 got faux-bold.
+   - Added --font-mono alias.
+
+   DEPLOY: upload this file AND the 5 .woff2 files that sit next to it in
+   the repo into the SAME folder on the server (src URLs are relative):
+     faculty-glyphic-latin.woff2       faculty-glyphic-latin-ext.woff2
+     dm-sans-vf-latin.woff2            dm-sans-vf-latin-ext.woff2
+     polysanstrial-neutral.woff2
+   WordPress Media Library blocks font uploads by default — use the same
+   FTP/file-manager route used for the v1 OTF. Then switch each snippet's
+   <link> from boon-shared.css to boon-shared-v2.css (new filename = no
+   stale-cache risk). Optional, for faster first paint, add to the theme
+   header: <link rel="preload" as="font" type="font/woff2" crossorigin
+   href=".../dm-sans-vf-latin.woff2"> and the same for faculty-glyphic-latin.woff2.
+   ============================================================ */
+
+/* ---------- Fonts ----------
+   Faculty Glyphic: brand display font (self-hosted, from Google Fonts)
+   PolySans Trial: brand body font — the trial file contains only 68 glyphs
+     (A-Z a-z 0-9 , . / : space) at weight 400. All other characters
+     (hyphens, quotes, ₹, …) and all other weights are served by DM Sans.
+   DM Sans: variable font (wght 100-1000), also registered under the
+     'PolySans Trial' family name for weights other than 400 so that
+     medium/semibold/bold text gets real drawn weights.
+   ------------------------------------------------------------ */
+
+/* Faculty Glyphic — display, single weight */
+@font-face {
+  font-family: 'Faculty Glyphic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('faculty-glyphic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Faculty Glyphic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('faculty-glyphic-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* PolySans Trial — regular weight only (the trial file has no other faces) */
+@font-face {
+  font-family: 'PolySans Trial';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('polysanstrial-neutral.woff2') format('woff2');
+}
+
+/* DM Sans as 'PolySans Trial' for every weight except 400 */
+@font-face {
+  font-family: 'PolySans Trial';
+  font-style: normal;
+  font-weight: 100 399;
+  font-display: swap;
+  src: url('dm-sans-vf-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'PolySans Trial';
+  font-style: normal;
+  font-weight: 100 399;
+  font-display: swap;
+  src: url('dm-sans-vf-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'PolySans Trial';
+  font-style: normal;
+  font-weight: 401 1000;
+  font-display: swap;
+  src: url('dm-sans-vf-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'PolySans Trial';
+  font-style: normal;
+  font-weight: 401 1000;
+  font-display: swap;
+  src: url('dm-sans-vf-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* DM Sans under its own name, for explicit references in page font stacks */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('dm-sans-vf-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('dm-sans-vf-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------- Brand tokens ---------- */
+:root {
+  /* Primary — Deep Teal */
+  --boon-primary: #023c3c;
+  --boon-secondary: #8fb6db;
+
+  /* Neutrals */
+  --boon-black: #000000;
+  --boon-graphite: rgb(30, 25, 25);
+  --boon-graphite-alt: rgb(25, 24, 23);
+  --boon-grey: #666666; /* was #959595 — darkened for WCAG AA (4.8:1 on chalk) as secondary text color */
+  --boon-chalk: #f5f5f5;
+  --boon-light-grey: #ececec;
+  --boon-silver: #dcdcdc;
+  --boon-white: #ffffff;
+
+  /* Semantic aliases */
+  --color-bg: var(--boon-white);
+  --color-bg-dark: var(--boon-primary);
+  --color-bg-muted: var(--boon-chalk);
+  --color-fg: var(--boon-primary);
+  --color-fg-light: var(--boon-chalk);
+  --color-fg-muted: var(--boon-grey);
+  --color-accent: var(--boon-secondary);
+  --color-border: var(--boon-light-grey);
+  --color-border-dark: var(--boon-graphite-alt);
+
+  /* Legacy aliases (old green palette mapped to new teal) */
+  --boon-green: #023c3c;
+  --boon-green-light: #034e4e;
+  --boon-green-deep: #012e2e;
+  --boon-bright: var(--boon-secondary);
+  --boon-bright-deep: #7aa4c6;
+  --boon-bright-light: #a8cce6;
+  --boon-bright-ink: #2f6690; /* accessible text version of --boon-bright for light backgrounds (5.1:1 on chalk) */
+  --boon-sage: #8fb6db;
+  --boon-teal: #023c3c;
+  --boon-teal-dark: #012e2e;
+  --boon-teal-darkest: #011f1f;
+  --boon-near-black: #011a1a;
+  --boon-cream: var(--boon-chalk);
+  --boon-cream-tint: #fafafa;
+  --boon-cream-deep: #e8e8e8;
+  --boon-warm-gray: var(--boon-silver);
+  --boon-warm-gray-deep: var(--boon-grey);
+  --boon-warm-dark: #5a5a5a;
+  --boon-surface: var(--boon-white);
+
+  /* Layout */
+  --boon-max: 1200px;
+  --boon-prose: 680px;
+  --boon-gutter: 24px;
+  --boon-gutter-lg: 48px;
+  --boon-sy: 96px;
+  --boon-sy-lg: 144px;
+  --boon-r: 0;
+  --boon-r-lg: 0;
+
+  /* Motion */
+  --boon-ease: cubic-bezier(.2,.7,.2,1);
+  --boon-dur-fast: 160ms;
+  --boon-dur-base: 240ms;
+  --boon-dur-reveal: 520ms;
+
+  /* Typography stacks */
+  --boon-display: 'Faculty Glyphic', Georgia, serif;
+  --boon-body: 'PolySans Trial', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --boon-mono: 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-display: var(--boon-display);
+  --font-body: var(--boon-body);
+  --font-mono: var(--boon-mono);
+
+  /* Type scale */
+  --text-xs: 11px;
+  --text-sm: 15px;
+  --text-base: 18px;
+  --text-md: 20px;
+  --text-lg: 25px;
+  --text-xl: 30px;
+  --text-2xl: 35px;
+  --text-3xl: 48px;
+  --text-display: 200px;
+
+  /* Line heights */
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* Font weights */
+  --weight-slim: 300;
+  --weight-neutral: 400;
+  --weight-median: 500;
+
+  /* Letter spacing */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.05em;
+  --tracking-caps: 0.1em;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+  /* Borders */
+  --radius-none: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-full: 9999px;
+  --border-thin: 0.75px;
+  --border-base: 1px;
+  --border-thick: 5px;
+
+  /* Commercial / Purify palette (mapped to new teal system) */
+  --boon-c-cream: var(--boon-chalk);
+  --boon-c-navy: #023c3c;
+  --boon-c-navy-deep: #012e2e;
+  --boon-c-navy-mid: #013535;
+  --boon-c-navy-card: #034e4e;
+  --boon-c-coral: var(--boon-secondary);
+  --boon-c-coral-hover: #7aa4c6;
+  --boon-c-gray: var(--boon-grey);
+  --boon-c-blush: #a8cce6;
+  --boon-c-border: var(--boon-light-grey);
+  --boon-c-border-dk: #034e4e;
+}
+
+/* ---------- Semantic type styles ---------- */
+.boon-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-fg);
+  text-transform: uppercase;
+}
+.boon-h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  color: var(--color-fg);
+}
+.boon-h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-snug);
+  color: var(--color-fg);
+}
+.boon-h3 {
+  font-family: var(--font-body);
+  font-weight: var(--weight-median);
+  font-size: var(--text-2xl);
+  line-height: var(--leading-snug);
+  color: var(--color-fg);
+}
+.boon-body {
+  font-family: var(--font-body);
+  font-weight: var(--weight-slim);
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--color-fg);
+}
+.boon-body-sm {
+  font-family: var(--font-body);
+  font-weight: var(--weight-neutral);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-fg);
+}
+.boon-caption {
+  font-family: var(--font-body);
+  font-weight: var(--weight-neutral);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-fg-muted);
+}
+.boon-label {
+  font-family: var(--font-body);
+  font-weight: var(--weight-slim);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  color: var(--color-fg);
+}
+
+/* ---------- Reveal animation ---------- */
+.boon-reveal{opacity:0;transform:translateY(18px);transition:opacity var(--boon-dur-reveal) var(--boon-ease),transform var(--boon-dur-reveal) var(--boon-ease)}
+.boon-reveal.is-in{opacity:1;transform:translateY(0)}

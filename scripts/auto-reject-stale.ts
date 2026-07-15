@@ -8,11 +8,11 @@
 import "dotenv/config";
 import { prisma } from "../lib/prisma";
 import { sendStageEmail } from "../lib/email/stage-emails";
-
-const DAYS = Number(process.env.AUTO_REJECT_DAYS || 75);
-const REASON = `Auto-rejected after ${DAYS} days in the pipeline`;
+import { getAutoRejectDays } from "../lib/settings";
 
 async function main() {
+  const DAYS = await getAutoRejectDays();
+  const REASON = `Auto-rejected after ${DAYS} days in the pipeline`;
   const cutoff = new Date(Date.now() - DAYS * 86_400_000);
 
   const stale = await prisma.candidate.findMany({

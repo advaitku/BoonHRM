@@ -9,8 +9,11 @@ One-time setup, then every deploy is `git push` + one click (or fully automatic)
 - A domain/subdomain in Plesk (e.g. `hrm.yourcompany.com`) with DNS pointing at
   the instance.
 - MySQL/MariaDB available in Plesk (bundled by default).
-- The Microsoft 365 setup from [`M365-SETUP.md`](./M365-SETUP.md) — without it,
-  OTP login emails cannot be sent in production.
+- **An email provider** — without one, OTP login emails cannot be sent in
+  production. Either:
+  - **Gmail SMTP** (quick, interim): [`GMAIL-SETUP.md`](./GMAIL-SETUP.md), or
+  - **Microsoft 365 Graph** (full, enables V2 reply-threading):
+    [`M365-SETUP.md`](./M365-SETUP.md).
 
 ## 1. Database
 
@@ -66,14 +69,23 @@ BETTER_AUTH_SECRET  = <openssl rand -base64 32>
 BETTER_AUTH_URL     = https://hrm.yourcompany.com
 APP_URL             = https://hrm.yourcompany.com
 COMPANY_NAME        = Your Company
-MS_TENANT_ID        = <from Azure app registration>
-MS_CLIENT_ID        = <from Azure app registration>
-MS_CLIENT_SECRET    = <from Azure app registration>
-CAREERS_MAILBOX     = careers@yourcompany.com
 PRIVATE_STORAGE_DIR = /var/www/vhosts/yourcompany.com/private_storage/boonhrm
 SEED_ADMIN_EMAIL    = you@yourcompany.com
 SEED_ADMIN_NAME     = Your Name
 NODE_ENV            = production
+
+# Email — Option A: Gmail SMTP (interim; docs/GMAIL-SETUP.md)
+SMTP_HOST           = smtp.gmail.com
+SMTP_PORT           = 465
+SMTP_USER           = recruiting@yourcompany.com
+SMTP_PASS           = <Google App Password>
+MAIL_FROM           = Your Company Recruitment <recruiting@yourcompany.com>
+
+# Email — Option B: Microsoft 365 Graph (docs/M365-SETUP.md)
+# MS_TENANT_ID      = <from Azure app registration>
+# MS_CLIENT_ID      = <from Azure app registration>
+# MS_CLIENT_SECRET  = <from Azure app registration>
+# CAREERS_MAILBOX   = careers@yourcompany.com
 ```
 
 ## 5. HTTPS
@@ -128,8 +140,10 @@ Run it once manually from the task UI and check the output ends with
 
 - **502/503 from Passenger**: check Plesk → Node.js → "Show logs". Most common:
   missing env var (app throws at boot) or `npm ci`/build not run after a pull.
-- **Emails not sending**: `MS_*` env vars wrong, admin consent not granted, or
-  the RBAC scope doesn't cover the mailbox — see `M365-SETUP.md` §2.
+- **Emails not sending**: for Gmail — wrong App Password, 2FA not enabled, or
+  `SMTP_*` vars missing (see `GMAIL-SETUP.md`); for Graph — `MS_*` env vars
+  wrong, admin consent not granted, or the RBAC scope doesn't cover the
+  mailbox (see `M365-SETUP.md` §2).
 - **OTP works in dev but not prod**: dev prints codes to the console instead of
   sending; production requires the Graph setup.
 - **Passenger doesn't pick up changes**: `touch tmp/restart.txt` in the app

@@ -1,8 +1,12 @@
-import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
-import { NavLinks } from "@/components/app/nav-links";
-import { SignOutButton } from "@/components/app/sign-out-button";
-import { Badge } from "@/components/ui/badge";
+import { AppSidebar } from "@/components/app/app-sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 
 export default async function AppLayout({
   children,
@@ -10,39 +14,35 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const session = await requireUser();
-  const admin = session.user.role === "admin";
-
-  const items = [
-    { href: "/dashboard", label: "Dashboard" },
-    { href: "/job-openings", label: "Job Openings" },
-    ...(admin ? [{ href: "/admin/users", label: "Users" }] : []),
-  ];
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4 sm:px-6">
-          <Link href="/dashboard" className="font-semibold tracking-tight">
-            BoonHRM
-          </Link>
-          <NavLinks items={items} />
-          <div className="ml-auto flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <div className="text-sm font-medium leading-none">
-                {session.user.name}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {session.user.email}
-              </div>
-            </div>
-            <Badge variant={admin ? "default" : "secondary"}>
-              {admin ? "Admin" : "HR"}
-            </Badge>
-            <SignOutButton />
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-7xl p-4 sm:p-6">{children}</main>
-    </div>
+    <SidebarProvider>
+      <AppSidebar
+        user={{
+          name: session.user.name,
+          email: session.user.email,
+          role: session.user.role ?? "hr",
+        }}
+      />
+      <SidebarInset>
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-1 !h-4" />
+          <span className="font-heading text-sm">Boon HRM</span>
+          <span className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            <ShieldAlert className="size-3" />
+            Internal
+          </span>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6">{children}</main>
+
+        <footer className="border-t px-6 py-3">
+          <p className="text-center text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+            Confidential &amp; Restricted — Boon internal use only
+          </p>
+        </footer>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -15,7 +15,7 @@ Lightsail instance managed with Plesk. See `docs/PLAN.md`-equivalent at
 - **Better Auth** (`better-auth`) — **OTP-only login** (`emailOTP` plugin), `admin` plugin for `admin`/`hr` roles. No passwords, no public signup. Auth tables (`user`/`session`/`account`/`verification`) are **hand-maintained** in `prisma/schema.prisma` — do NOT run `better-auth generate` (it would rewrite them).
 - **shadcn/ui only** (Radix + Tailwind v4), components in `components/ui/` (style: `radix-nova`). Add more with `npx shadcn@latest add -y <name>`.
 - **dnd-kit** for the Kanban drag-and-drop.
-- **Microsoft Graph** (`@microsoft/microsoft-graph-client` + `@azure/identity`, app-only) for all outbound email. In dev, OTP + emails print to the console (no Graph creds needed).
+- **Outbound email** is pluggable (`lib/email/transport.ts`): **Gmail/SMTP** via nodemailer (interim, `SMTP_*` env — docs/GMAIL-SETUP.md), **Microsoft Graph** app-only (`MS_*` env — docs/M365-SETUP.md, needed for V2 reply-threading), or **console** in dev (no creds: OTP + emails print to the console). Auto-detected, or forced with `MAIL_PROVIDER`.
 - **Resume**: `unpdf` (PDF) / `mammoth` (DOCX) text extraction + regex for email/phone only (V1).
 
 ## Commands
@@ -32,11 +32,17 @@ npx prisma studio                   # browse the DB
 npx tsx prisma/seed.ts              # seed the first admin
 npx tsx scripts/seed-demo.ts        # optional demo opening + candidates
 npx tsx scripts/auto-reject-stale.ts   # 75-day sweep (runs daily via cron in prod)
+npx tsx scripts/expire-offers.ts       # expire unanswered 2-day offer links → back to Shortlist (daily cron)
 ```
 
-**Warning**: `npm run build` and `npm run dev` share `.next` — running a build
-while the dev server is up corrupts the dev server (500s). Stop it first (or
-typecheck with `npx tsc --noEmit` instead).
+**Warning**: `npm run build` and `npm run dev` share `.next` by default —
+running a build while the dev server is up corrupts the dev cache (500s /
+ENOENT app-build-manifest). For local verification builds ALWAYS use a separate
+dist dir so the dev server is untouched:
+`NEXT_DIST_DIR=.next-build npm run build` (bash) or
+`$env:NEXT_DIST_DIR='.next-build'; npm run build` (PowerShell).
+If the dev server ever 500s with ENOENT under `.next/`, stop it, `rm -rf .next`,
+and start it again.
 
 **Dev auth bypass**: the login page has a "⚡ Dev sign-in as admin" button, and
 `POST /api/dev/login` (optionally `{"email": "<existing user>"}`) creates a real

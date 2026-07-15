@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
+import { getOfferState, offerUrl } from "@/lib/offer";
 import { STAGE_LABELS } from "@/lib/stages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,13 +26,16 @@ import { StageBadge } from "@/components/candidates/stage-badge";
 import { CandidateActions } from "@/components/candidates/candidate-actions";
 import { CandidateProfileForm } from "@/components/candidates/candidate-profile-form";
 import { ResumePanel } from "@/components/candidates/resume-panel";
+import { CandidateTags } from "@/components/candidates/candidate-tags";
+import { CommentsPanel } from "@/components/candidates/comments-panel";
+import { CopyLink } from "@/components/candidates/copy-link";
 
 export default async function CandidatePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireUser();
+  const session = await requireUser();
   const { id } = await params;
 
   const candidate = await prisma.candidate.findUnique({
@@ -42,22 +46,24 @@ export default async function CandidatePage({
       emailThread: {
         include: { messages: { orderBy: { occurredAt: "desc" } } },
       },
+      comments: { orderBy: { createdAt: "desc" } },
+      tags: { include: { tag: true } },
     },
   });
   if (!candidate) notFound();
 
-  const movers = await prisma.user.findMany({
-    where: {
-      id: {
-        in: candidate.stageHistory
-          .map((h) => h.movedById)
-          .filter((v): v is string => Boolean(v)),
-      },
-    },
+  const allTags = await prisma.tag.findMany({ orderBy: { name: "asc" } });
+
+  const userIds = new Set<string>();
+  for (const h of candidate.stageHistory) if (h.movedById) userIds.add(h.movedById);
+  for (const c of candidate.comments) if (c.authorId) userIds.add(c.authorId);
+  const teamUsers = await prisma.user.findMany({
+    where: { id: { in: [...userIds] } },
     select: { id: true, name: true },
   });
-  const moverName = (mid: string | null) =>
-    mid ? (movers.find((m) => m.id === mid)?.name ?? "Unknown") : "System";
+  const userName = (uid: string | null) =>
+    uid ? (teamUsers.find((m) => m.id === uid)?.name ?? "Unknown") : "System";
+  const moverName = userName;
 
   const dateFmt = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -101,17 +107,37 @@ export default async function CandidatePage({
             {daysInStage === 0 ? "less than a day" : `${daysInStage} day(s)`} ·
             added {dateFmt.format(candidate.createdAt)}
           </p>
+          <CandidateTags
+            candidateId={candidate.id}
+            tags={candidate.tags.map((t) => ({
+              id: t.tag.id,
+              name: t.tag.name,
+              color: t.tag.color,
+            }))}
+            suggestions={allTags.map((t) => ({
+              id: t.id,
+              name: t.name,
+              color: t.color,
+            }))}
+          />
         </div>
         <CandidateActions candidateId={candidate.id} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Tabs defaultValue="profile">
+          <Tabs defaultValue="activity">
             <TabsList>
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="resume">Resume</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="activity">
+                Activity
+                {candidate.comments.length ? (
+                  <Badge variant="secondary" className="ml-1.5">
+                    {candidate.comments.length}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
               <TabsTrigger value="emails">
                 Emails
                 {candidate.emailThread?.messages.length ? (
@@ -150,7 +176,20 @@ export default async function CandidatePage({
               />
             </TabsContent>
 
-            <TabsContent value="activity" className="mt-4">
+            <TabsContent value="activity" className="mt-4 space-y-6">
+              <CommentsPanel
+                candidateId={candidate.id}
+                currentUserId={session.user.id}
+                isAdmin={session.user.role === "admin"}
+                comments={candidate.comments.map((c) => ({
+                  id: c.id,
+                  body: c.body,
+                  authorId: c.authorId,
+                  authorName: userName(c.authorId),
+                  createdAt: c.createdAt.toISOString(),
+                }))}
+              />
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Stage history</CardTitle>
@@ -292,20 +331,62 @@ export default async function CandidatePage({
           {candidate.stage === "APPROVED" && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Approval</CardTitle>
+                <CardTitle className="text-base">Approval &amp; offer</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="space-y-3 text-sm">
                 <p>
                   Approved
                   {candidate.approvedAt
                     ? ` on ${dateFmt.format(candidate.approvedAt)}`
                     : ""}
                 </p>
+                {candidate.dateOfJoining && (
+                  <p className="text-muted-foreground">
+                    Date of joining: {dateFmt.format(candidate.dateOfJoining)}
+                  </p>
+                )}
                 {candidate.ctcDetails && (
                   <p className="whitespace-pre-wrap text-muted-foreground">
                     {candidate.ctcDetails}
                   </p>
                 )}
+                {(() => {
+                  const state = getOfferState(candidate);
+                  return (
+                    <div className="space-y-2">
+                      {state === "accepted" && (
+                        <Badge>
+                          Offer accepted
+                          {candidate.offerAcceptedAt
+                            ? ` · ${dateFmt.format(candidate.offerAcceptedAt)}`
+                            : ""}
+                        </Badge>
+                      )}
+                      {state === "declined" && (
+                        <Badge variant="destructive">
+                          Offer declined
+                          {candidate.offerDeclinedAt
+                            ? ` · ${dateFmt.format(candidate.offerDeclinedAt)}`
+                            : ""}
+                        </Badge>
+                      )}
+                      {state === "pending" && (
+                        <Badge variant="outline">
+                          Awaiting response
+                          {candidate.offerTokenExpiresAt
+                            ? ` · link expires ${dateFmt.format(candidate.offerTokenExpiresAt)}`
+                            : ""}
+                        </Badge>
+                      )}
+                      {state === "expired" && (
+                        <Badge variant="secondary">Offer link expired</Badge>
+                      )}
+                      {state === "pending" && candidate.offerToken && (
+                        <CopyLink url={offerUrl(candidate.offerToken)} />
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           )}

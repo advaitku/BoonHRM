@@ -1,4 +1,5 @@
 // Microsoft Graph outbound email (app-only auth, single shared mailbox).
+// Config comes from Settings → Email (env fallback); see docs/M365-SETUP.md.
 //
 // Uses draft-then-send instead of /sendMail: creating the draft returns the
 // message's id, conversationId and internetMessageId immediately (sendMail
@@ -7,12 +8,7 @@ import "isomorphic-fetch";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
 import { ClientSecretCredential } from "@azure/identity";
-
-export interface GraphMailInput {
-  to: string;
-  subject: string;
-  html: string;
-}
+import type { MailSettings } from "@/lib/settings";
 
 export interface GraphSendResult {
   graphMessageId: string;
@@ -20,32 +16,35 @@ export interface GraphSendResult {
   internetMessageId: string | null;
 }
 
-let cachedClient: Client | null = null;
+let cached: { key: string; client: Client } | null = null;
 
-function graphClient(): Client {
-  if (cachedClient) return cachedClient;
-  const tenantId = process.env.MS_TENANT_ID;
-  const clientId = process.env.MS_CLIENT_ID;
-  const clientSecret = process.env.MS_CLIENT_SECRET;
-  if (!tenantId || !clientId || !clientSecret) {
-    throw new Error("Microsoft Graph env vars (MS_*) are not configured");
+function graphClient(settings: MailSettings): Client {
+  const { msTenantId, msClientId, msClientSecret } = settings;
+  if (!msTenantId || !msClientId || !msClientSecret) {
+    throw new Error("Microsoft Graph is not configured (tenant/client/secret missing)");
   }
-  const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+  const key = `${msTenantId}:${msClientId}:${msClientSecret}`;
+  if (cached?.key === key) return cached.client;
+
+  const credential = new ClientSecretCredential(msTenantId, msClientId, msClientSecret);
   const authProvider = new TokenCredentialAuthenticationProvider(credential, {
     scopes: ["https://graph.microsoft.com/.default"],
   });
-  cachedClient = Client.initWithMiddleware({ authProvider });
-  return cachedClient;
+  const client = Client.initWithMiddleware({ authProvider });
+  cached = { key, client };
+  return client;
 }
 
 export async function sendGraphMail(
-  input: GraphMailInput,
+  settings: MailSettings,
+  input: { to: string; subject: string; html: string },
 ): Promise<GraphSendResult> {
-  const mailbox = process.env.CAREERS_MAILBOX;
-  if (!mailbox) throw new Error("CAREERS_MAILBOX is not configured");
+  if (!settings.careersMailbox) {
+    throw new Error("Graph sender mailbox is not configured");
+  }
 
-  const client = graphClient();
-  const base = `/users/${encodeURIComponent(mailbox)}`;
+  const client = graphClient(settings);
+  const base = `/users/${encodeURIComponent(settings.careersMailbox)}`;
 
   const draft = await client.api(`${base}/messages`).post({
     subject: input.subject,

@@ -72,9 +72,16 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
         toast.error(data.error ?? "Upload failed");
         return;
       }
+      const picked = [
+        data.email && "email",
+        data.phone && "phone",
+        data.address && "address",
+        data.workHistory && "experience",
+        data.education && "education",
+      ].filter(Boolean);
       toast.success(
-        data.email || data.phone
-          ? `Candidate created — picked up ${[data.email && "email", data.phone && "phone"].filter(Boolean).join(" & ")} from the resume`
+        picked.length > 0
+          ? `Candidate created — picked up ${picked.join(", ")} from the resume`
           : "Candidate created — review and complete the profile",
       );
       setOpen(false);
@@ -141,8 +148,8 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{file.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024).toFixed(0)} KB — email & phone are
-                      picked up automatically
+                      {(file.size / 1024).toFixed(0)} KB — name, contact,
+                      address, experience & education are picked up when found
                     </p>
                   </div>
                   <Button

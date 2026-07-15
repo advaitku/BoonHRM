@@ -5,6 +5,7 @@ import { Building2, Check, MailX, Video } from "lucide-react";
 import type { BoardCandidate, BoardOpening } from "@/components/kanban/board-types";
 import type { MoveInput } from "@/lib/actions/stage";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -27,7 +28,12 @@ import { cn } from "@/lib/utils";
 type Extras = Partial<
   Pick<
     MoveInput,
-    "rejectionType" | "rejectionReason" | "interviewUrlKind" | "ctcDetails" | "sendEmail"
+    | "rejectionType"
+    | "rejectionReason"
+    | "interviewUrlKind"
+    | "ctcDetails"
+    | "dateOfJoining"
+    | "sendEmail"
   >
 >;
 
@@ -249,19 +255,24 @@ export function RejectDialog({
   );
 }
 
-/** Approval move — capture salary/CTC details for the approval email. */
+/** Approval move — capture CTC + date of joining for the offer page. */
 export function ApproveDialog({
   candidate,
   onConfirm,
   onCancel,
 }: GateDialogProps) {
   const [ctc, setCtc] = useState("");
+  const [doj, setDoj] = useState("");
 
   useEffect(() => {
-    if (candidate) setCtc("");
+    if (candidate) {
+      setCtc("");
+      setDoj("");
+    }
   }, [candidate]);
 
   const canEmail = Boolean(candidate?.email);
+  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <Dialog open={Boolean(candidate)} onOpenChange={(v) => !v && onCancel()}>
@@ -269,24 +280,36 @@ export function ApproveDialog({
         <DialogHeader>
           <DialogTitle>Approve {candidate?.fullName} 🎉</DialogTitle>
           <DialogDescription>
-            Salary / CTC details are included in the approval email and saved on
-            the candidate.
+            CTC and date of joining are shown on the candidate&apos;s secure
+            offer page and saved on the candidate.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <Label htmlFor="ctc-details">Salary / CTC details</Label>
-          <Textarea
-            id="ctc-details"
-            rows={4}
-            value={ctc}
-            onChange={(e) => setCtc(e.target.value)}
-            placeholder={"e.g. CTC ₹12,00,000 per annum\nFixed: ₹10,80,000 · Variable: ₹1,20,000\nJoining: 1 September 2026"}
-          />
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ctc-details">Salary / CTC details</Label>
+            <Textarea
+              id="ctc-details"
+              rows={4}
+              value={ctc}
+              onChange={(e) => setCtc(e.target.value)}
+              placeholder={"e.g. CTC ₹12,00,000 per annum\nFixed: ₹10,80,000 · Variable: ₹1,20,000"}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="doj">Date of joining</Label>
+            <Input
+              id="doj"
+              type="date"
+              value={doj}
+              min={today}
+              onChange={(e) => setDoj(e.target.value)}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
             {canEmail
-              ? "A congratulations email with these details goes to the candidate."
-              : "The candidate has no email on file — details are saved, no email is sent."}
+              ? "The candidate receives an email with a secure offer link (valid 2 days) to accept or decline — CTC appears on the offer page, not in the email."
+              : "The candidate has no email on file — details are saved, no offer link is sent."}
           </p>
         </div>
 
@@ -295,11 +318,16 @@ export function ApproveDialog({
             Cancel
           </Button>
           <Button
+            disabled={!doj}
             onClick={() =>
-              onConfirm({ ctcDetails: ctc.trim() || undefined, sendEmail: canEmail })
+              onConfirm({
+                ctcDetails: ctc.trim() || undefined,
+                dateOfJoining: doj,
+                sendEmail: canEmail,
+              })
             }
           >
-            {canEmail ? "Approve & send email" : "Approve"}
+            {canEmail ? "Approve & send offer link" : "Approve"}
           </Button>
         </DialogFooter>
       </DialogContent>

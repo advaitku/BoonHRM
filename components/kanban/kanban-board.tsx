@@ -36,7 +36,12 @@ const STAGES: Stage[] = [...PIPELINE, "APPROVED", "REJECTED"];
 type Extras = Partial<
   Pick<
     MoveInput,
-    "rejectionType" | "rejectionReason" | "interviewUrlKind" | "ctcDetails" | "sendEmail"
+    | "rejectionType"
+    | "rejectionReason"
+    | "interviewUrlKind"
+    | "ctcDetails"
+    | "dateOfJoining"
+    | "sendEmail"
   >
 >;
 

@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-dm-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-faculty-glyphic);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -48,73 +48,88 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Boon 2026 rebrand tokens (see boon-shared-v2.css):
+   deep teal #023c3c · accent blue #8fb6db · chalk #f5f5f5 · light-grey #ececec
+   silver #dcdcdc · grey #666666 · radius 0 (sharp corners). */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --boon-primary: #023c3c;
+  --boon-secondary: #8fb6db;
+  --boon-secondary-ink: #2f6690; /* accessible text version of the accent */
+  --boon-teal-light: #034e4e;
+  --boon-teal-deep: #012e2e;
+  --boon-teal-darkest: #011f1f;
+  --boon-near-black: #011a1a;
+  --boon-chalk: #f5f5f5;
+  --boon-light-grey: #ececec;
+  --boon-silver: #dcdcdc;
+  --boon-grey: #666666;
+
+  --background: #ffffff;
+  --foreground: var(--boon-primary);
+  --card: #ffffff;
+  --card-foreground: var(--boon-primary);
+  --popover: #ffffff;
+  --popover-foreground: var(--boon-primary);
+  --primary: var(--boon-primary);
+  --primary-foreground: var(--boon-chalk);
+  --secondary: var(--boon-chalk);
+  --secondary-foreground: var(--boon-primary);
+  --muted: var(--boon-chalk);
+  --muted-foreground: var(--boon-grey);
+  --accent: var(--boon-chalk);
+  --accent-foreground: var(--boon-primary);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: var(--boon-light-grey);
+  --input: var(--boon-silver);
+  --ring: var(--boon-secondary);
+  --chart-1: var(--boon-primary);
+  --chart-2: var(--boon-secondary);
+  --chart-3: var(--boon-teal-light);
+  --chart-4: #7aa4c6;
+  --chart-5: #a8cce6;
+  --radius: 0rem; /* brand: square corners everywhere */
+  --sidebar: var(--boon-primary);
+  --sidebar-foreground: var(--boon-chalk);
+  --sidebar-primary: var(--boon-secondary);
+  --sidebar-primary-foreground: var(--boon-teal-deep);
+  --sidebar-accent: var(--boon-teal-light);
+  --sidebar-accent-foreground: var(--boon-chalk);
+  --sidebar-border: var(--boon-teal-light);
+  --sidebar-ring: var(--boon-secondary);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: var(--boon-teal-darkest);
+  --foreground: var(--boon-chalk);
+  --card: var(--boon-teal-deep);
+  --card-foreground: var(--boon-chalk);
+  --popover: var(--boon-teal-deep);
+  --popover-foreground: var(--boon-chalk);
+  --primary: var(--boon-secondary);
+  --primary-foreground: var(--boon-teal-deep);
+  --secondary: var(--boon-teal-light);
+  --secondary-foreground: var(--boon-chalk);
+  --muted: #013535;
+  --muted-foreground: #9fb8b8;
+  --accent: var(--boon-teal-light);
+  --accent-foreground: var(--boon-chalk);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: var(--boon-teal-light);
+  --input: var(--boon-teal-light);
+  --ring: var(--boon-secondary);
+  --chart-1: var(--boon-secondary);
+  --chart-2: #a8cce6;
+  --chart-3: #7aa4c6;
+  --chart-4: var(--boon-teal-light);
+  --chart-5: var(--boon-chalk);
+  --sidebar: var(--boon-near-black);
+  --sidebar-foreground: var(--boon-chalk);
+  --sidebar-primary: var(--boon-secondary);
+  --sidebar-primary-foreground: var(--boon-teal-deep);
+  --sidebar-accent: var(--boon-teal-deep);
+  --sidebar-accent-foreground: var(--boon-chalk);
+  --sidebar-border: var(--boon-teal-deep);
+  --sidebar-ring: var(--boon-secondary);
 }
 
 @layer base {
@@ -125,5 +140,10 @@
      defined by classes on <body>, and CSS variables don't cascade upward. */
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* Brand: Faculty Glyphic for page/section headings (boon-h1/boon-h2). */
+  h1,
+  h2 {
+    @apply font-heading tracking-tight;
   }
 }

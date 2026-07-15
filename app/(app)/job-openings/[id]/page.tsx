@@ -21,7 +21,13 @@ export default async function JobOpeningPage({
   const opening = await prisma.jobOpening.findUnique({
     where: { id },
     include: {
-      candidates: { orderBy: { stageEnteredAt: "asc" } },
+      candidates: {
+        orderBy: { stageEnteredAt: "asc" },
+        include: {
+          tags: { include: { tag: true } },
+          _count: { select: { comments: true } },
+        },
+      },
     },
   });
   if (!opening) notFound();
@@ -118,6 +124,12 @@ export default async function JobOpeningPage({
             stageEnteredAt: c.stageEnteredAt.toISOString(),
             hasResume: Boolean(c.resumeFilePath),
             rejectionType: c.rejectionType,
+            tags: c.tags.map((t) => ({
+              id: t.tag.id,
+              name: t.tag.name,
+              color: t.tag.color,
+            })),
+            commentCount: c._count.comments,
           }))}
         />
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
@@ -76,10 +77,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl">BoonHRM</CardTitle>
+        <CardHeader className="space-y-3 text-center">
+          <Image
+            src="/Boon_Logo.png"
+            alt="Boon"
+            width={72}
+            height={61}
+            priority
+            className="mx-auto"
+          />
+          <CardTitle className="font-heading text-2xl">HRM</CardTitle>
           <CardDescription>
             {step === "email"
               ? "Sign in with a one-time code sent to your email"
@@ -164,6 +173,9 @@ export default function LoginPage() {
           </div>
         )}
       </Card>
+      <p className="text-center text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+        Confidential &amp; Restricted — Boon internal use only
+      </p>
     </div>
   );
 }

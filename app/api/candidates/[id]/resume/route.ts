@@ -81,8 +81,12 @@ export async function PUT(request: Request, { params }: Params) {
       extractedResumeText: extracted.text || null,
       parsedEmail: extracted.email,
       parsedPhone: extracted.phone,
+      // Fill from the new resume, but never overwrite what HR already typed.
       email: candidate.email ?? extracted.email,
       phone: candidate.phone ?? extracted.phone,
+      address: candidate.address ?? extracted.address,
+      workHistory: candidate.workHistory ?? extracted.workHistory,
+      education: candidate.education ?? extracted.education,
     },
   });
 

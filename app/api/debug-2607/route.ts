@@ -151,5 +151,36 @@ export async function GET(request: Request) {
     };
   }
 
+  // 8) Compare process.env.DATABASE_URL against what's in the env files on
+  //    disk. Fingerprints only (length + hash prefix) — never the value.
+  try {
+    const { createHash } = await import("node:crypto");
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const fp = (s: string | null | undefined) =>
+      s
+        ? { len: s.length, sha8: createHash("sha256").update(s).digest("hex").slice(0, 8) }
+        : null;
+    const files: Record<string, unknown> = {};
+    for (const f of [".env", ".env.local", ".env.production", ".env.production.local"]) {
+      try {
+        const txt = readFileSync(join(process.cwd(), f), "utf8");
+        const m = txt.match(/^\s*DATABASE_URL\s*=\s*(.*)\s*$/m);
+        let raw = m ? m[1].trim() : null;
+        if (raw && (raw.startsWith('"') || raw.startsWith("'"))) raw = raw.slice(1, -1);
+        files[f] = { exists: true, dbUrl: fp(raw) };
+      } catch {
+        files[f] = { exists: false };
+      }
+    }
+    out.envCompare = {
+      processDbUrl: fp(process.env.DATABASE_URL),
+      files,
+      note: "processDbUrl.sha8 should equal .env's dbUrl.sha8 — a mismatch means something overrides .env",
+    };
+  } catch (e) {
+    out.envCompare = { error: e instanceof Error ? e.message : String(e) };
+  }
+
   return NextResponse.json(out, { status: 200 });
 }

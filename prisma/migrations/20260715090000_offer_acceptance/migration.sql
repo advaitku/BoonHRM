@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `candidate` ADD COLUMN `dateOfJoining` DATE NULL,
+ALTER TABLE `Candidate` ADD COLUMN `dateOfJoining` DATE NULL,
     ADD COLUMN `offerAcceptedAt` DATETIME(3) NULL,
     ADD COLUMN `offerDeclinedAt` DATETIME(3) NULL,
     ADD COLUMN `offerToken` VARCHAR(191) NULL,

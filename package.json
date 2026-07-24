@@ -13,6 +13,7 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
+    "migrate:recover-offer": "prisma migrate resolve --rolled-back 20260715090000_offer_acceptance",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

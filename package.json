@@ -15,7 +15,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "migrate:recover-offer": "prisma migrate resolve --rolled-back 20260715090000_offer_acceptance",
     "seed": "tsx prisma/seed.ts",
-    "mail:test": "tsx scripts/mail-test.ts"
+    "mail:test": "tsx scripts/mail-test.ts",
+    "login:diag": "tsx scripts/login-diag.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

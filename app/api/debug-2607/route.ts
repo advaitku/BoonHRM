@@ -87,5 +87,69 @@ export async function GET(request: Request) {
     out.smtpVerify = { ok: false, ms: Date.now() - t, error: e instanceof Error ? e.message : String(e) };
   }
 
+  // 5) Who/where is this process? (compare against Run-script context)
+  try {
+    const os = await import("node:os");
+    out.proc = {
+      user: os.userInfo().username,
+      cwd: process.cwd(),
+      node: process.version,
+      pid: process.pid,
+    };
+  } catch (e) {
+    out.proc = { error: e instanceof Error ? e.message : String(e) };
+  }
+
+  // 6) Raw TCP to the DB port — does MariaDB even answer this process?
+  t = Date.now();
+  out.rawTcp = await new Promise((resolve) => {
+    import("node:net").then(({ createConnection }) => {
+      const started = Date.now();
+      const sock = createConnection({ host: "127.0.0.1", port: 3306 });
+      const done = (r: Record<string, unknown>) => {
+        sock.destroy();
+        resolve({ ...r, ms: Date.now() - started });
+      };
+      sock.setTimeout(4000, () => done({ ok: false, error: "TCP connect timeout (4s)" }));
+      sock.once("error", (e) => done({ ok: false, error: e.message }));
+      // MariaDB sends a greeting packet immediately on connect.
+      sock.once("data", (buf) =>
+        done({ ok: true, greeting: buf.length + " bytes received (server answered)" }),
+      );
+      sock.once("connect", () => {
+        // connected but no greeting within 4s → setTimeout above fires
+      });
+    });
+  });
+
+  // 7) Direct single mariadb connection (no pool) — surfaces the REAL error
+  //    that the pool's "pool timeout" message hides.
+  t = Date.now();
+  try {
+    const mariadb = (await import("mariadb")).default;
+    const u = new URL(process.env.DATABASE_URL ?? "");
+    const conn = await mariadb.createConnection({
+      host: u.hostname,
+      port: Number(u.port) || 3306,
+      user: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
+      database: u.pathname.replace(/^\//, ""),
+      connectTimeout: 5000,
+    });
+    const rows = await conn.query("SELECT 1 AS ok");
+    await conn.end();
+    out.directDb = { ok: true, ms: Date.now() - t, rows };
+  } catch (e) {
+    const err = e as Error & { code?: string; errno?: number; sqlState?: string };
+    out.directDb = {
+      ok: false,
+      ms: Date.now() - t,
+      error: err.message,
+      code: err.code ?? null,
+      errno: err.errno ?? null,
+      sqlState: err.sqlState ?? null,
+    };
+  }
+
   return NextResponse.json(out, { status: 200 });
 }

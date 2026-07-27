@@ -7,6 +7,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import packageJson from "@/package.json";
 
 export default async function AppLayout({
   children,
@@ -39,7 +40,8 @@ export default async function AppLayout({
 
         <footer className="border-t px-6 py-3">
           <p className="text-center text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            Confidential &amp; Restricted — Boon internal use only
+            Confidential &amp; Restricted — Boon internal use only · v
+            {packageJson.version}
           </p>
         </footer>
       </SidebarInset>

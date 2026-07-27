@@ -48,6 +48,7 @@ export default async function CandidatePage({
       },
       comments: { orderBy: { createdAt: "desc" } },
       tags: { include: { tag: true } },
+      resumes: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!candidate) notFound();
@@ -129,7 +130,14 @@ export default async function CandidatePage({
           <Tabs defaultValue="activity">
             <TabsList>
               <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="resume">Resume</TabsTrigger>
+              <TabsTrigger value="resume">
+                Resume
+                {candidate.resumes.length ? (
+                  <Badge variant="secondary" className="ml-1.5">
+                    {candidate.resumes.length}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
               <TabsTrigger value="activity">
                 Activity
                 {candidate.comments.length ? (
@@ -169,10 +177,13 @@ export default async function CandidatePage({
             <TabsContent value="resume" className="mt-4">
               <ResumePanel
                 candidateId={candidate.id}
-                hasResume={Boolean(candidate.resumeFilePath)}
-                resumeMime={candidate.resumeMime}
-                resumeOriginalName={candidate.resumeOriginalName}
-                extractedText={candidate.extractedResumeText}
+                resumes={candidate.resumes.map((r) => ({
+                  id: r.id,
+                  mime: r.mime,
+                  originalName: r.originalName,
+                  extractedText: r.extractedText,
+                  createdAt: r.createdAt.toISOString(),
+                }))}
               />
             </TabsContent>
 

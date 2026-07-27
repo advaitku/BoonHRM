@@ -159,13 +159,7 @@ model Candidate {
   workHistory String? @db.Text // "last 2 jobs" — manual in V1, AI in V2
   education   String? @db.Text // manual in V1, AI in V2
 
-  // Resume
-  resumeFilePath      String? @db.Text // private disk, outside webroot
-  resumeMime          String?
-  resumeOriginalName  String?
-  extractedResumeText String? @db.LongText
-  parsedEmail         String?
-  parsedPhone         String?
+  resumes Resume[]
 
   // Kanban state (server authoritative)
   stage          Stage    @default(POOL)
@@ -201,6 +195,23 @@ model Candidate {
   @@index([jobOpeningId, stage])
   @@index([email])
   @@index([createdAt]) // for the 75-day sweep
+}
+
+model Resume {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  filePath     String  @db.Text // private disk, outside webroot
+  mime         String
+  originalName String
+  extractedText String? @db.LongText
+  parsedEmail  String?
+  parsedPhone  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([candidateId, createdAt])
 }
 
 model CandidateComment {

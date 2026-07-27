@@ -25,7 +25,7 @@ export default async function JobOpeningPage({
         orderBy: { stageEnteredAt: "asc" },
         include: {
           tags: { include: { tag: true } },
-          _count: { select: { comments: true } },
+          _count: { select: { comments: true, resumes: true } },
         },
       },
     },
@@ -122,7 +122,7 @@ export default async function JobOpeningPage({
             phone: c.phone,
             stage: c.stage,
             stageEnteredAt: c.stageEnteredAt.toISOString(),
-            hasResume: Boolean(c.resumeFilePath),
+            hasResume: c._count.resumes > 0,
             rejectionType: c.rejectionType,
             tags: c.tags.map((t) => ({
               id: t.tag.id,

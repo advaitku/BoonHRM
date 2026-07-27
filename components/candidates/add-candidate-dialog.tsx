@@ -8,6 +8,7 @@ import { createCandidate } from "@/lib/actions/candidates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -126,7 +127,7 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
           Add candidate
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add candidate</DialogTitle>
           <DialogDescription>
@@ -225,7 +226,10 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
           </TabsContent>
 
           <TabsContent value="form" className="mt-4">
-            <form onSubmit={submitForm} className="space-y-4">
+            <form
+              onSubmit={submitForm}
+              className="max-h-[65vh] space-y-4 overflow-y-auto pr-1"
+            >
               <div className="space-y-2">
                 <Label htmlFor="fullName">
                   Full name <span className="text-destructive">*</span>
@@ -242,10 +246,23 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                   <Input id="phone" name="phone" autoComplete="off" />
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Address, work history and education can be added on the
-                candidate&apos;s page.
-              </p>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Textarea id="address" name="address" rows={2} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="workHistory">Work history</Label>
+                <Textarea
+                  id="workHistory"
+                  name="workHistory"
+                  rows={3}
+                  placeholder="Last 2 jobs — company, role, dates"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="education">Education</Label>
+                <Textarea id="education" name="education" rows={2} />
+              </div>
               <DialogFooter>
                 <Button type="submit" disabled={pending} className="w-full">
                   {pending ? "Adding…" : "Add candidate"}

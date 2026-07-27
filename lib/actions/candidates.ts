@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { deleteStoredFile } from "@/lib/storage";
 
 const emptyToUndefined = (v: unknown) =>
-  typeof v === "string" && v.trim() === "" ? undefined : v;
+  v == null || (typeof v === "string" && v.trim() === "") ? undefined : v;
 
 const candidateSchema = z.object({
   fullName: z.string().trim().min(1, "Name is required").max(160),
@@ -100,11 +100,14 @@ export async function updateCandidate(
 export async function deleteCandidate(candidateId: string): Promise<ActionResult> {
   await requireUser();
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { resumes: { select: { filePath: true } } },
+  });
   if (!candidate) return { ok: false, error: "Candidate not found" };
 
-  if (candidate.resumeFilePath) {
-    await deleteStoredFile(candidate.resumeFilePath);
+  for (const resume of candidate.resumes) {
+    await deleteStoredFile(resume.filePath);
   }
   await prisma.candidate.delete({ where: { id: candidateId } });
 

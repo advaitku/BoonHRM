@@ -57,11 +57,6 @@ export async function POST(request: Request) {
       address: extracted.address,
       workHistory: extracted.workHistory,
       education: extracted.education,
-      parsedEmail: extracted.email,
-      parsedPhone: extracted.phone,
-      extractedResumeText: extracted.text || null,
-      resumeMime: file.type,
-      resumeOriginalName: file.name,
       createdById: session.user.id,
       stageHistory: {
         create: { toStage: "POOL", movedById: session.user.id },
@@ -70,9 +65,16 @@ export async function POST(request: Request) {
   });
 
   const resumeFilePath = await saveResume(candidate.id, file.type, buffer);
-  await prisma.candidate.update({
-    where: { id: candidate.id },
-    data: { resumeFilePath },
+  await prisma.resume.create({
+    data: {
+      candidateId: candidate.id,
+      filePath: resumeFilePath,
+      mime: file.type,
+      originalName: file.name,
+      extractedText: extracted.text || null,
+      parsedEmail: extracted.email,
+      parsedPhone: extracted.phone,
+    },
   });
 
   return NextResponse.json({

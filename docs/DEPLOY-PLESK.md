@@ -230,6 +230,12 @@ npm run build
 touch tmp/restart.txt
 ```
 
+Before deploying, bump the `version` field in `package.json` (semver: patch
+for fixes, minor for features, major for breaking changes) and add an entry
+to `CHANGELOG.md`. The version is shown in the app's footer, so after
+restarting you can confirm the live site is actually running the build you
+just shipped.
+
 ## Troubleshooting
 
 - **502/503 from Passenger** — Plesk → Node.js → **Show Log**. Most common

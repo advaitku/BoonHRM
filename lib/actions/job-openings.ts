@@ -138,11 +138,13 @@ export async function setJobOpeningAssignee(
 
 export async function deleteJobOpening(id: string): Promise<ActionResult> {
   await requireUser();
-  const candidateCount = await prisma.candidate.count({ where: { jobOpeningId: id } });
-  if (candidateCount > 0) {
+  const applicationCount = await prisma.application.count({
+    where: { jobOpeningId: id },
+  });
+  if (applicationCount > 0) {
     return {
       ok: false,
-      error: `This opening has ${candidateCount} candidate(s). Close it instead of deleting.`,
+      error: `This opening has ${applicationCount} candidate(s). Close it instead of deleting.`,
     };
   }
   await prisma.jobOpening.delete({ where: { id } });

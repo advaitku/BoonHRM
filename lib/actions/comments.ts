@@ -20,7 +20,10 @@ export async function addComment(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid comment" };
   }
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { applications: { select: { jobOpeningId: true } } },
+  });
   if (!candidate) return { ok: false, error: "Candidate not found" };
 
   await prisma.candidateComment.create({
@@ -28,7 +31,9 @@ export async function addComment(
   });
 
   revalidatePath(`/candidates/${candidateId}`);
-  revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
+  for (const application of candidate.applications) {
+    revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  }
   return { ok: true };
 }
 
@@ -37,7 +42,11 @@ export async function deleteComment(commentId: string): Promise<ActionResult> {
 
   const comment = await prisma.candidateComment.findUnique({
     where: { id: commentId },
-    include: { candidate: { select: { id: true, jobOpeningId: true } } },
+    include: {
+      candidate: {
+        select: { id: true, applications: { select: { jobOpeningId: true } } },
+      },
+    },
   });
   if (!comment) return { ok: false, error: "Comment not found" };
 
@@ -50,6 +59,8 @@ export async function deleteComment(commentId: string): Promise<ActionResult> {
   await prisma.candidateComment.delete({ where: { id: commentId } });
 
   revalidatePath(`/candidates/${comment.candidate.id}`);
-  revalidatePath(`/job-openings/${comment.candidate.jobOpeningId}`);
+  for (const application of comment.candidate.applications) {
+    revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  }
   return { ok: true };
 }

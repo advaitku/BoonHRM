@@ -27,7 +27,10 @@ export async function addTagToCandidate(
   }
   const name = parsed.data;
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { applications: { select: { jobOpeningId: true } } },
+  });
   if (!candidate) return { ok: false, error: "Candidate not found" };
 
   // Tag names are case-insensitively unique (utf8mb4_unicode_ci) — reuse the
@@ -43,7 +46,9 @@ export async function addTagToCandidate(
   });
 
   revalidatePath(`/candidates/${candidateId}`);
-  revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
+  for (const application of candidate.applications) {
+    revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  }
   return { ok: true };
 }
 
@@ -53,7 +58,10 @@ export async function removeTagFromCandidate(
 ): Promise<ActionResult> {
   await requireUser();
 
-  const candidate = await prisma.candidate.findUnique({ where: { id: candidateId } });
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { applications: { select: { jobOpeningId: true } } },
+  });
   if (!candidate) return { ok: false, error: "Candidate not found" };
 
   await prisma.candidateTag.deleteMany({ where: { candidateId, tagId } });
@@ -65,6 +73,8 @@ export async function removeTagFromCandidate(
   }
 
   revalidatePath(`/candidates/${candidateId}`);
-  revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
+  for (const application of candidate.applications) {
+    revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  }
   return { ok: true };
 }

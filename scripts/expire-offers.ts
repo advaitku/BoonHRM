@@ -1,4 +1,4 @@
-// Moves APPROVED candidates whose offer link expired (2 days) without a
+// Moves APPROVED applications whose offer link expired (2 days) without a
 // response back to SHORTLIST. The offer page also does this lazily on visit —
 // this sweep catches candidates who never revisit the link.
 //
@@ -11,14 +11,14 @@ import { prisma } from "../lib/prisma";
 import { expireOfferToShortlist } from "../lib/offer";
 
 async function main() {
-  const stale = await prisma.candidate.findMany({
+  const stale = await prisma.application.findMany({
     where: {
       stage: "APPROVED",
       offerTokenExpiresAt: { lt: new Date() },
       offerAcceptedAt: null,
       offerDeclinedAt: null,
     },
-    select: { id: true, fullName: true },
+    select: { id: true, candidate: { select: { fullName: true } } },
   });
 
   if (stale.length === 0) {
@@ -26,9 +26,11 @@ async function main() {
     return;
   }
 
-  for (const candidate of stale) {
-    await expireOfferToShortlist(candidate.id, "APPROVED");
-    console.log(`[expire-offers] ${candidate.fullName} (APPROVED → SHORTLIST, offer expired)`);
+  for (const application of stale) {
+    await expireOfferToShortlist(application.id, "APPROVED");
+    console.log(
+      `[expire-offers] ${application.candidate.fullName} (APPROVED → SHORTLIST, offer expired)`,
+    );
   }
 
   console.log(`[expire-offers] Done — ${stale.length} offer(s) expired.`);

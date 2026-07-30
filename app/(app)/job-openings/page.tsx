@@ -13,7 +13,7 @@ export default async function JobOpeningsPage() {
     prisma.jobOpening.findMany({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
-        candidates: { select: { stage: true } },
+        applications: { select: { stage: true } },
       },
     }),
     prisma.user.findMany({
@@ -73,7 +73,7 @@ export default async function JobOpeningsPage() {
             createdAt: o.createdAt.toISOString(),
             assignedToId: o.assignedToId,
             closureDeadline: o.closureDeadline ? o.closureDeadline.toISOString() : null,
-            stages: o.candidates.map((c) => c.stage),
+            stages: o.applications.map((a) => a.stage),
           }))}
           users={teamUsers}
         />

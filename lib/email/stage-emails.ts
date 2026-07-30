@@ -34,7 +34,8 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
     where: { id: input.applicationId },
     include: { candidate: true, jobOpening: true },
   });
-  if (!application?.candidate.email) return;
+  const email = application?.candidate.email;
+  if (!application || !email) return;
 
   const { candidate, jobOpening: opening } = application;
   let mailType: MailType;
@@ -90,7 +91,7 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
 
   await deliverCandidateEmail({
     applicationId: application.id,
-    to: candidate.email,
+    to: email,
     subject,
     html,
     text,

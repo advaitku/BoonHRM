@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
-  Briefcase,
   CalendarDays,
   Mail,
   MapPin,
@@ -20,15 +19,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StageBadge } from "@/components/candidates/stage-badge";
 import { CandidateActions } from "@/components/candidates/candidate-actions";
 import { CandidateProfileForm } from "@/components/candidates/candidate-profile-form";
 import { ResumePanel } from "@/components/candidates/resume-panel";
 import { CandidateTags } from "@/components/candidates/candidate-tags";
 import { CommentsPanel } from "@/components/candidates/comments-panel";
-import { CopyLink } from "@/components/candidates/copy-link";
+import {
+  ApplicationsPanel,
+  type ApplicationRow,
+} from "@/components/candidates/applications-panel";
 
 export default async function CandidatePage({
   params,
@@ -41,10 +41,15 @@ export default async function CandidatePage({
   const candidate = await prisma.candidate.findUnique({
     where: { id },
     include: {
-      jobOpening: { select: { id: true, title: true, location: true } },
-      stageHistory: { orderBy: { createdAt: "desc" } },
-      emailThread: {
-        include: { messages: { orderBy: { occurredAt: "desc" } } },
+      applications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          jobOpening: true,
+          stageHistory: { orderBy: { createdAt: "desc" } },
+          emailThread: {
+            include: { messages: { orderBy: { occurredAt: "desc" } } },
+          },
+        },
       },
       comments: { orderBy: { createdAt: "desc" } },
       tags: { include: { tag: true } },
@@ -56,7 +61,8 @@ export default async function CandidatePage({
   const allTags = await prisma.tag.findMany({ orderBy: { name: "asc" } });
 
   const userIds = new Set<string>();
-  for (const h of candidate.stageHistory) if (h.movedById) userIds.add(h.movedById);
+  for (const a of candidate.applications)
+    for (const h of a.stageHistory) if (h.movedById) userIds.add(h.movedById);
   for (const c of candidate.comments) if (c.authorId) userIds.add(c.authorId);
   const teamUsers = await prisma.user.findMany({
     where: { id: { in: [...userIds] } },
@@ -64,7 +70,6 @@ export default async function CandidatePage({
   });
   const userName = (uid: string | null) =>
     uid ? (teamUsers.find((m) => m.id === uid)?.name ?? "Unknown") : "System";
-  const moverName = userName;
 
   const dateFmt = new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -78,9 +83,43 @@ export default async function CandidatePage({
     hour: "2-digit",
     minute: "2-digit",
   });
-  const daysInStage = Math.floor(
-    (Date.now() - candidate.stageEnteredAt.getTime()) / 86_400_000,
-  );
+
+  // Stage history + emails across every application, labeled by opening.
+  const history = candidate.applications
+    .flatMap((a) =>
+      a.stageHistory.map((h) => ({ ...h, openingTitle: a.jobOpening.title })),
+    )
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const messages = candidate.applications
+    .flatMap(
+      (a) =>
+        a.emailThread?.messages.map((m) => ({
+          ...m,
+          openingTitle: a.jobOpening.title,
+        })) ?? [],
+    )
+    .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+
+  const applicationRows: ApplicationRow[] = candidate.applications.map((a) => {
+    const offerState = a.stage === "APPROVED" ? getOfferState(a) : null;
+    return {
+      id: a.id,
+      stage: a.stage,
+      stageEnteredAt: a.stageEnteredAt.toISOString(),
+      rejectionType: a.rejectionType,
+      rejectionReason: a.rejectionReason,
+      offerState,
+      offerUrl:
+        offerState === "pending" && a.offerToken ? offerUrl(a.offerToken) : null,
+      opening: {
+        id: a.jobOpening.id,
+        title: a.jobOpening.title,
+        onlineInterviewUrl: a.jobOpening.onlineInterviewUrl,
+        inPersonInterviewUrl: a.jobOpening.inPersonInterviewUrl,
+        autoNotify: a.jobOpening.autoNotify,
+      },
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -92,20 +131,17 @@ export default async function CandidatePage({
             size="sm"
             className="-ml-2 text-muted-foreground"
           >
-            <Link href={`/job-openings/${candidate.jobOpening.id}`}>
+            <Link href="/job-openings">
               <ArrowLeft className="size-4" />
-              {candidate.jobOpening.title}
+              All openings
             </Link>
           </Button>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {candidate.fullName}
-            </h1>
-            <StageBadge stage={candidate.stage} />
-          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {candidate.fullName}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            In {STAGE_LABELS[candidate.stage]} for{" "}
-            {daysInStage === 0 ? "less than a day" : `${daysInStage} day(s)`} ·
+            {candidate.applications.length}{" "}
+            {candidate.applications.length === 1 ? "application" : "applications"} ·
             added {dateFmt.format(candidate.createdAt)}
           </p>
           <CandidateTags
@@ -126,7 +162,12 @@ export default async function CandidatePage({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="space-y-6 lg:col-span-2">
+          <ApplicationsPanel
+            subject={{ fullName: candidate.fullName, email: candidate.email }}
+            applications={applicationRows}
+          />
+
           <Tabs defaultValue="activity">
             <TabsList>
               <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -148,9 +189,9 @@ export default async function CandidatePage({
               </TabsTrigger>
               <TabsTrigger value="emails">
                 Emails
-                {candidate.emailThread?.messages.length ? (
+                {messages.length ? (
                   <Badge variant="secondary" className="ml-1.5">
-                    {candidate.emailThread.messages.length}
+                    {messages.length}
                   </Badge>
                 ) : null}
               </TabsTrigger>
@@ -206,44 +247,56 @@ export default async function CandidatePage({
                   <CardTitle className="text-base">Stage history</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ol className="relative space-y-6 border-l pl-6">
-                    {candidate.stageHistory.map((h) => (
-                      <li key={h.id} className="relative">
-                        <span className="absolute -left-[30.5px] top-1 size-2.5 rounded-full border-2 border-background bg-muted-foreground" />
-                        <p className="text-sm font-medium">
-                          {h.fromStage
-                            ? `${STAGE_LABELS[h.fromStage]} → ${STAGE_LABELS[h.toStage]}`
-                            : `Added to ${STAGE_LABELS[h.toStage]}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {dateTimeFmt.format(h.createdAt)} · by {moverName(h.movedById)}
-                        </p>
-                        {h.rejectionType && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {h.rejectionType === "CANDIDATE_DECLINED"
-                              ? "Candidate declined"
-                              : "Rejected by company"}
-                            {h.rejectionReason ? ` — ${h.rejectionReason}` : ""}
+                  {history.length === 0 ? (
+                    <p className="py-2 text-center text-sm text-muted-foreground">
+                      No stage moves yet.
+                    </p>
+                  ) : (
+                    <ol className="relative space-y-6 border-l pl-6">
+                      {history.map((h) => (
+                        <li key={h.id} className="relative">
+                          <span className="absolute -left-[30.5px] top-1 size-2.5 rounded-full border-2 border-background bg-muted-foreground" />
+                          <p className="text-sm font-medium">
+                            {h.fromStage
+                              ? `${STAGE_LABELS[h.fromStage]} → ${STAGE_LABELS[h.toStage]}`
+                              : `Added to ${STAGE_LABELS[h.toStage]}`}
+                            <span className="ml-1.5 font-normal text-muted-foreground">
+                              · {h.openingTitle}
+                            </span>
                           </p>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
+                          <p className="text-xs text-muted-foreground">
+                            {dateTimeFmt.format(h.createdAt)} · by {userName(h.movedById)}
+                          </p>
+                          {h.rejectionType && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {h.rejectionType === "CANDIDATE_DECLINED"
+                                ? "Candidate declined"
+                                : "Rejected by company"}
+                              {h.rejectionReason ? ` — ${h.rejectionReason}` : ""}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="emails" className="mt-4">
-              {candidate.emailThread?.messages.length ? (
+              {messages.length ? (
                 <div className="space-y-3">
-                  {candidate.emailThread.messages.map((m) => (
+                  {messages.map((m) => (
                     <Card key={m.id}>
                       <CardContent className="space-y-1 pt-4">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium">{m.subject}</p>
-                          <Badge variant="outline">
-                            {m.mailType.replace(/_/g, " ").toLowerCase()}
-                          </Badge>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="secondary">{m.openingTitle}</Badge>
+                            <Badge variant="outline">
+                              {m.mailType.replace(/_/g, " ").toLowerCase()}
+                            </Badge>
+                          </div>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {m.direction === "OUTBOUND" ? "Sent" : "Received"}{" "}
@@ -299,16 +352,6 @@ export default async function CandidatePage({
                   <span className="whitespace-pre-wrap">{candidate.address}</span>
                 </div>
               )}
-              <Separator />
-              <div className="flex items-center gap-2">
-                <Briefcase className="size-4 shrink-0 text-muted-foreground" />
-                <Link
-                  href={`/job-openings/${candidate.jobOpening.id}`}
-                  className="truncate hover:underline"
-                >
-                  {candidate.jobOpening.title}
-                </Link>
-              </div>
               <div className="flex items-center gap-2">
                 <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
                 <span className="text-muted-foreground">
@@ -317,90 +360,6 @@ export default async function CandidatePage({
               </div>
             </CardContent>
           </Card>
-
-          {candidate.stage === "REJECTED" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Rejection</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>
-                  {candidate.rejectionType === "CANDIDATE_DECLINED"
-                    ? "Candidate declined"
-                    : "Rejected by company"}
-                  {candidate.rejectedAt
-                    ? ` on ${dateFmt.format(candidate.rejectedAt)}`
-                    : ""}
-                </p>
-                {candidate.rejectionReason && (
-                  <p className="text-muted-foreground">{candidate.rejectionReason}</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {candidate.stage === "APPROVED" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Approval &amp; offer</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <p>
-                  Approved
-                  {candidate.approvedAt
-                    ? ` on ${dateFmt.format(candidate.approvedAt)}`
-                    : ""}
-                </p>
-                {candidate.dateOfJoining && (
-                  <p className="text-muted-foreground">
-                    Date of joining: {dateFmt.format(candidate.dateOfJoining)}
-                  </p>
-                )}
-                {candidate.ctcDetails && (
-                  <p className="whitespace-pre-wrap text-muted-foreground">
-                    {candidate.ctcDetails}
-                  </p>
-                )}
-                {(() => {
-                  const state = getOfferState(candidate);
-                  return (
-                    <div className="space-y-2">
-                      {state === "accepted" && (
-                        <Badge>
-                          Offer accepted
-                          {candidate.offerAcceptedAt
-                            ? ` · ${dateFmt.format(candidate.offerAcceptedAt)}`
-                            : ""}
-                        </Badge>
-                      )}
-                      {state === "declined" && (
-                        <Badge variant="destructive">
-                          Offer declined
-                          {candidate.offerDeclinedAt
-                            ? ` · ${dateFmt.format(candidate.offerDeclinedAt)}`
-                            : ""}
-                        </Badge>
-                      )}
-                      {state === "pending" && (
-                        <Badge variant="outline">
-                          Awaiting response
-                          {candidate.offerTokenExpiresAt
-                            ? ` · link expires ${dateFmt.format(candidate.offerTokenExpiresAt)}`
-                            : ""}
-                        </Badge>
-                      )}
-                      {state === "expired" && (
-                        <Badge variant="secondary">Offer link expired</Badge>
-                      )}
-                      {state === "pending" && candidate.offerToken && (
-                        <CopyLink url={offerUrl(candidate.offerToken)} />
-                      )}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

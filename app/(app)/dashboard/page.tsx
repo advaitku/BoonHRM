@@ -48,22 +48,22 @@ export default async function DashboardPage({
     recentRejections,
   ] = await Promise.all([
     prisma.jobOpening.count({ where: { status: "OPEN" } }),
-    prisma.candidate.count({
+    prisma.application.count({
       where: { stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] } },
     }),
-    prisma.candidate.count({ where: { stage: "INTERVIEW" } }),
-    prisma.candidate.count({ where: { stage: "APPROVED" } }),
-    prisma.candidate.count({
+    prisma.application.count({ where: { stage: "INTERVIEW" } }),
+    prisma.application.count({ where: { stage: "APPROVED" } }),
+    prisma.application.count({
       where: {
         stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] },
         createdAt: { lt: warnCutoff },
       },
     }),
-    prisma.candidate.findMany({
+    prisma.application.findMany({
       where: { createdAt: { gte: chartStart } },
       select: { createdAt: true },
     }),
-    prisma.candidate.findMany({
+    prisma.application.findMany({
       where: { rejectedAt: { gte: chartStart } },
       select: { rejectedAt: true },
     }),
@@ -86,7 +86,12 @@ export default async function DashboardPage({
             { phone: { contains: query } },
           ],
         },
-        include: { jobOpening: { select: { id: true, title: true } } },
+        include: {
+          applications: {
+            include: { jobOpening: { select: { id: true, title: true } } },
+            orderBy: { createdAt: "desc" },
+          },
+        },
         orderBy: { updatedAt: "desc" },
         take: 20,
       })
@@ -96,7 +101,7 @@ export default async function DashboardPage({
     where: { status: "OPEN" },
     orderBy: { createdAt: "desc" },
     take: 6,
-    include: { candidates: { select: { stage: true } } },
+    include: { applications: { select: { stage: true } } },
   });
 
   return (
@@ -152,11 +157,21 @@ export default async function DashboardPage({
                     <p className="truncate font-medium">{c.fullName}</p>
                     <p className="truncate text-sm text-muted-foreground">
                       {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact"}
-                      {" — "}
-                      {c.jobOpening.title}
                     </p>
+                    {c.applications.length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {c.applications.map((a) => (
+                          <span
+                            key={a.id}
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                          >
+                            {a.jobOpening.title}
+                            <StageBadge stage={a.stage} />
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <StageBadge stage={c.stage} />
                 </Link>
               ))}
             </CardContent>
@@ -216,8 +231,8 @@ export default async function DashboardPage({
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {openings.map((opening) => {
-                  const total = opening.candidates.length;
-                  const counts = countByStage(opening.candidates.map((c) => c.stage));
+                  const total = opening.applications.length;
+                  const counts = countByStage(opening.applications.map((a) => a.stage));
                   return (
                     <Link key={opening.id} href={`/job-openings/${opening.id}`}>
                       <Card className="h-full transition-all hover:-translate-y-0.5 hover:shadow-md">

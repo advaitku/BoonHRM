@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -10,9 +11,13 @@ import {
   Loader2,
   Upload,
   UserPlus,
+  UserRound,
   X,
 } from "lucide-react";
-import { createCandidate } from "@/lib/actions/candidates";
+import {
+  createApplication,
+  type DuplicateResolution,
+} from "@/lib/actions/applications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,13 +39,29 @@ const ACCEPTED =
 
 const MAX_FILES = 10;
 
-type FileStatus = "queued" | "uploading" | "done" | "error";
+type FileStatus =
+  | "queued"
+  | "uploading"
+  | "done"
+  | "error"
+  // Parsed email matches an existing candidate — waiting on Overwrite/Keep.
+  | "duplicate"
+  // Existing candidate already applied to this opening (one per opening, ever).
+  | "already_applied";
 
 type QueuedFile = {
   file: File;
   status: FileStatus;
   error?: string;
   candidateId?: string;
+  candidateName?: string;
+};
+
+/** Duplicate found by the manual form — the submitted data is held until the
+ * user picks a resolution. */
+type ManualDuplicate = {
+  formData: FormData;
+  existingName: string;
 };
 
 export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
@@ -48,46 +69,79 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  // Manual tab state
+  const [manualDuplicate, setManualDuplicate] = useState<ManualDuplicate | null>(null);
+  const [alreadyApplied, setAlreadyApplied] = useState<string | null>(null); // candidateId
+
   // Resume tab state
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [nameOverride, setNameOverride] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setQueue([]);
     setDragOver(false);
+    setNameOverride("");
+    setManualDuplicate(null);
+    setAlreadyApplied(null);
   }
 
-  function submitForm(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  function submitManual(formData: FormData, resolution?: DuplicateResolution) {
     startTransition(async () => {
-      const result = await createCandidate(jobOpeningId, formData);
+      const result = await createApplication(jobOpeningId, formData, resolution);
       if (result.ok) {
         toast.success("Candidate added to Pool");
         setOpen(false);
+        reset();
         router.refresh();
-      } else {
-        toast.error(result.error);
+        return;
+      }
+      switch (result.kind) {
+        case "duplicate":
+          setManualDuplicate({ formData, existingName: result.existingName });
+          break;
+        case "already_applied":
+          setManualDuplicate(null);
+          setAlreadyApplied(result.candidateId);
+          break;
+        default:
+          toast.error(result.error);
       }
     });
   }
 
+  function submitForm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setAlreadyApplied(null);
+    submitManual(new FormData(e.currentTarget));
+  }
+
   async function uploadOne(
     entry: QueuedFile,
-    nameOverride: string,
+    override: string,
+    resolution?: DuplicateResolution,
   ): Promise<QueuedFile> {
     try {
       const body = new FormData();
       body.set("jobOpeningId", jobOpeningId);
       body.set("file", entry.file);
-      if (nameOverride) body.set("fullName", nameOverride);
+      if (override) body.set("fullName", override);
+      if (resolution) body.set("resolution", resolution);
 
       const res = await fetch("/api/candidates", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
         return { ...entry, status: "error", error: data.error ?? "Upload failed" };
+      }
+      if (data.status === "duplicate" || data.status === "already_applied") {
+        return {
+          ...entry,
+          status: data.status,
+          candidateId: data.candidateId,
+          candidateName: data.candidateName,
+        };
       }
       return { ...entry, status: "done", candidateId: data.id };
     } catch {
@@ -99,14 +153,29 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
     }
   }
 
+  function finishIfAllDone(results: QueuedFile[]) {
+    const done = results.filter((r) => r.status === "done");
+    if (done.length === results.length && done.length > 0) {
+      setOpen(false);
+      reset();
+      if (done.length === 1 && done[0].candidateId) {
+        router.push(`/candidates/${done[0].candidateId}`);
+      }
+      router.refresh();
+      return true;
+    }
+    return false;
+  }
+
   async function submitResumes(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (queue.length === 0) return;
     // The name override only makes sense for a single resume.
-    const nameOverride =
+    const override =
       queue.length === 1
         ? String(new FormData(e.currentTarget).get("fullName") ?? "").trim()
         : "";
+    setNameOverride(override);
 
     setUploading(true);
     const results: QueuedFile[] = [...queue];
@@ -115,7 +184,7 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
         if (results[i].status === "done") continue;
         results[i] = { ...results[i], status: "uploading" };
         setQueue([...results]);
-        results[i] = await uploadOne(results[i], nameOverride);
+        results[i] = await uploadOne(results[i], override);
         setQueue([...results]);
       }
     } finally {
@@ -124,8 +193,11 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
 
     const done = results.filter((r) => r.status === "done");
     const failed = results.filter((r) => r.status === "error");
+    const needsAttention = results.filter(
+      (r) => r.status === "duplicate" || r.status === "already_applied",
+    );
 
-    if (failed.length === 0) {
+    if (failed.length === 0 && needsAttention.length === 0) {
       toast.success(
         done.length === 1
           ? "Candidate created from resume"
@@ -137,15 +209,40 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
         router.push(`/candidates/${done[0].candidateId}`);
       }
       router.refresh();
-    } else {
-      toast.error(
-        done.length > 0
-          ? `${done.length} created, ${failed.length} failed — failed files stay in the list`
-          : `Upload failed for ${failed.length} file${failed.length > 1 ? "s" : ""}`,
+      return;
+    }
+
+    if (needsAttention.length > 0) {
+      toast.info(
+        `${needsAttention.length} resume${needsAttention.length > 1 ? "s" : ""} matched existing candidates — resolve below`,
       );
-      // Keep only the failures so a retry doesn't duplicate the successes.
-      setQueue(results.filter((r) => r.status !== "done"));
-      if (done.length > 0) router.refresh();
+    }
+    if (failed.length > 0) {
+      toast.error(
+        `Upload failed for ${failed.length} file${failed.length > 1 ? "s" : ""}`,
+      );
+    }
+    // Keep only entries that still need something so a retry doesn't
+    // duplicate the successes.
+    setQueue(results.filter((r) => r.status !== "done"));
+    if (done.length > 0) router.refresh();
+  }
+
+  async function resolveDuplicate(index: number, resolution: DuplicateResolution) {
+    const results = [...queue];
+    results[index] = { ...results[index], status: "uploading" };
+    setQueue([...results]);
+    setUploading(true);
+    try {
+      results[index] = await uploadOne(results[index], nameOverride, resolution);
+    } finally {
+      setUploading(false);
+    }
+    setQueue([...results]);
+    if (results[index].status === "done") {
+      toast.success(`Application added for ${results[index].candidateName ?? results[index].file.name}`);
+      router.refresh();
+      finishIfAllDone(results);
     }
   }
 
@@ -182,7 +279,9 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
     setQueue((q) => q.filter((_, i) => i !== index));
   }
 
-  const queuedCount = queue.filter((q) => q.status !== "done").length;
+  const queuedCount = queue.filter(
+    (q) => q.status === "queued" || q.status === "error",
+  ).length;
 
   return (
     <Dialog
@@ -228,6 +327,9 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                         <CheckCircle2 className="size-6 shrink-0 text-green-600" />
                       ) : entry.status === "error" ? (
                         <AlertCircle className="size-6 shrink-0 text-destructive" />
+                      ) : entry.status === "duplicate" ||
+                        entry.status === "already_applied" ? (
+                        <UserRound className="size-6 shrink-0 text-amber-600" />
                       ) : (
                         <FileText className="size-6 shrink-0 text-muted-foreground" />
                       )}
@@ -249,8 +351,42 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                               ? "Extracting…"
                               : entry.status === "done"
                                 ? "Candidate created"
-                                : `${(entry.file.size / 1024).toFixed(0)} KB`}
+                                : entry.status === "duplicate"
+                                  ? `Email matches ${entry.candidateName ?? "an existing candidate"}`
+                                  : entry.status === "already_applied"
+                                    ? `${entry.candidateName ?? "This candidate"} already applied to this opening`
+                                    : `${(entry.file.size / 1024).toFixed(0)} KB`}
                         </p>
+                        {entry.status === "duplicate" && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={uploading}
+                              onClick={() => resolveDuplicate(i, "overwrite")}
+                            >
+                              Overwrite profile
+                            </Button>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              disabled={uploading}
+                              onClick={() => resolveDuplicate(i, "keep")}
+                            >
+                              Keep existing data
+                            </Button>
+                          </div>
+                        )}
+                        {entry.status === "already_applied" && entry.candidateId && (
+                          <Link
+                            href={`/candidates/${entry.candidateId}`}
+                            className="mt-1 inline-block text-xs font-medium text-primary hover:underline"
+                          >
+                            View candidate →
+                          </Link>
+                        )}
                       </div>
                       {!uploading && entry.status !== "done" && (
                         <Button
@@ -320,7 +456,7 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                 }}
               />
 
-              {queue.length === 1 && (
+              {queue.length === 1 && queue[0].status === "queued" && (
                 <div className="space-y-2">
                   <Label htmlFor="resume-fullName">
                     Candidate name{" "}
@@ -359,49 +495,111 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
           </TabsContent>
 
           <TabsContent value="form" className="mt-4">
-            <form
-              onSubmit={submitForm}
-              className="max-h-[65vh] space-y-4 overflow-y-auto pr-1"
-            >
-              <div className="space-y-2">
-                <Label htmlFor="fullName">
-                  Full name <span className="text-destructive">*</span>
-                </Label>
-                <Input id="fullName" name="fullName" required autoComplete="off" />
+            {manualDuplicate ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border bg-muted/40 p-4">
+                  <div className="flex items-start gap-3">
+                    <UserRound className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">
+                        {manualDuplicate.existingName} already exists with this
+                        email
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Either way, a new application is added for this opening.
+                        Overwrite replaces their profile with what you entered;
+                        keep leaves it untouched.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="gap-2 sm:flex-col">
+                  <Button
+                    disabled={pending}
+                    className="w-full"
+                    onClick={() =>
+                      submitManual(manualDuplicate.formData, "overwrite")
+                    }
+                  >
+                    Overwrite profile &amp; add application
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={pending}
+                    className="w-full"
+                    onClick={() => submitManual(manualDuplicate.formData, "keep")}
+                  >
+                    Keep existing data &amp; add application
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={pending}
+                    className="w-full"
+                    onClick={() => setManualDuplicate(null)}
+                  >
+                    Back to the form
+                  </Button>
+                </DialogFooter>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+            ) : (
+              <form
+                onSubmit={submitForm}
+                className="max-h-[65vh] space-y-4 overflow-y-auto pr-1"
+              >
+                {alreadyApplied && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                    <p>
+                      This candidate has already applied to this opening.{" "}
+                      <Link
+                        href={`/candidates/${alreadyApplied}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        View their profile →
+                      </Link>
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" name="email" type="email" autoComplete="off" />
+                  <Label htmlFor="fullName">
+                    Full name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input id="fullName" name="fullName" required autoComplete="off" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" name="email" type="email" autoComplete="off" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input id="phone" name="phone" autoComplete="off" />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <Input id="phone" name="phone" autoComplete="off" />
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea id="address" name="address" rows={2} />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Textarea id="address" name="address" rows={2} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="workHistory">Work history</Label>
-                <Textarea
-                  id="workHistory"
-                  name="workHistory"
-                  rows={3}
-                  placeholder="Last 2 jobs — company, role, dates"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="education">Education</Label>
-                <Textarea id="education" name="education" rows={2} />
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={pending} className="w-full">
-                  {pending ? "Adding…" : "Add candidate"}
-                </Button>
-              </DialogFooter>
-            </form>
+                <div className="space-y-2">
+                  <Label htmlFor="workHistory">Work history</Label>
+                  <Textarea
+                    id="workHistory"
+                    name="workHistory"
+                    rows={3}
+                    placeholder="Last 2 jobs — company, role, dates"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="education">Education</Label>
+                  <Textarea id="education" name="education" rows={2} />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={pending} className="w-full">
+                    {pending ? "Adding…" : "Add candidate"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

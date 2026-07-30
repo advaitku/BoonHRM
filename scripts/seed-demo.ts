@@ -16,16 +16,25 @@ async function main() {
   ] as const;
 
   for (const d of demo) {
-    const existing = await prisma.candidate.findFirst({
-      where: { jobOpeningId: opening.id, email: d.email },
+    // One person per email; one application per (person, opening).
+    const candidate = await prisma.candidate.upsert({
+      where: { email: d.email },
+      update: {},
+      create: { fullName: d.fullName, email: d.email, phone: d.phone },
     });
-    if (existing) continue;
-    await prisma.candidate.create({
+    const applied = await prisma.application.findUnique({
+      where: {
+        candidateId_jobOpeningId: {
+          candidateId: candidate.id,
+          jobOpeningId: opening.id,
+        },
+      },
+    });
+    if (applied) continue;
+    await prisma.application.create({
       data: {
+        candidateId: candidate.id,
         jobOpeningId: opening.id,
-        fullName: d.fullName,
-        email: d.email,
-        phone: d.phone,
         stage: d.stage,
         ...(d.stage === "REJECTED"
           ? { rejectionType: "COMPANY_REJECTED", rejectedAt: new Date() }

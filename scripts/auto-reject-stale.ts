@@ -1,4 +1,4 @@
-// Auto-rejects candidates stuck in the pipeline (Pool / Interview / Shortlist)
+// Auto-rejects applications stuck in the pipeline (Pool / Interview / Shortlist)
 // for more than AUTO_REJECT_DAYS (default 75) since creation.
 //
 // Runs daily via a Plesk Scheduled Task:
@@ -15,12 +15,16 @@ async function main() {
   const REASON = `Auto-rejected after ${DAYS} days in the pipeline`;
   const cutoff = new Date(Date.now() - DAYS * 86_400_000);
 
-  const stale = await prisma.candidate.findMany({
+  const stale = await prisma.application.findMany({
     where: {
       stage: { in: ["POOL", "INTERVIEW", "SHORTLIST"] },
       createdAt: { lt: cutoff },
     },
-    select: { id: true, fullName: true, stage: true },
+    select: {
+      id: true,
+      stage: true,
+      candidate: { select: { fullName: true } },
+    },
   });
 
   if (stale.length === 0) {
@@ -29,10 +33,10 @@ async function main() {
   }
 
   let rejected = 0;
-  for (const candidate of stale) {
+  for (const application of stale) {
     await prisma.$transaction([
-      prisma.candidate.update({
-        where: { id: candidate.id },
+      prisma.application.update({
+        where: { id: application.id },
         data: {
           stage: "REJECTED",
           stageEnteredAt: new Date(),
@@ -41,10 +45,10 @@ async function main() {
           rejectedAt: new Date(),
         },
       }),
-      prisma.candidateStageHistory.create({
+      prisma.applicationStageHistory.create({
         data: {
-          candidateId: candidate.id,
-          fromStage: candidate.stage,
+          applicationId: application.id,
+          fromStage: application.stage,
           toStage: "REJECTED",
           movedById: null, // system
           rejectionType: "COMPANY_REJECTED",
@@ -55,7 +59,7 @@ async function main() {
 
     try {
       await sendStageEmail({
-        candidateId: candidate.id,
+        applicationId: application.id,
         toStage: "REJECTED",
         interviewUrlKind: "none",
         ctcDetails: null,
@@ -63,14 +67,19 @@ async function main() {
         movedById: null,
       });
     } catch (error) {
-      console.error(`[auto-reject] Email failed for ${candidate.fullName}:`, error);
+      console.error(
+        `[auto-reject] Email failed for ${application.candidate.fullName}:`,
+        error,
+      );
     }
 
     rejected++;
-    console.log(`[auto-reject] ${candidate.fullName} (${candidate.stage} → REJECTED)`);
+    console.log(
+      `[auto-reject] ${application.candidate.fullName} (${application.stage} → REJECTED)`,
+    );
   }
 
-  console.log(`[auto-reject] Done — ${rejected}/${stale.length} candidate(s) auto-rejected.`);
+  console.log(`[auto-reject] Done — ${rejected}/${stale.length} application(s) auto-rejected.`);
 }
 
 main()

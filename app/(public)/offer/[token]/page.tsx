@@ -33,7 +33,7 @@ export default async function OfferPage({
 }) {
   const { token } = await params;
 
-  const candidate = await prisma.candidate.findUnique({
+  const application = await prisma.application.findUnique({
     where: { offerToken: token },
     select: {
       id: true,
@@ -44,7 +44,7 @@ export default async function OfferPage({
     },
   });
 
-  if (!candidate) {
+  if (!application) {
     return (
       <TerminalCard
         title="Link not valid"
@@ -53,12 +53,12 @@ export default async function OfferPage({
     );
   }
 
-  const state = getOfferState(candidate);
+  const state = getOfferState(application);
 
   if (state === "expired") {
     // Lazy expiry — don't wait for the daily sweep.
-    if (candidate.stage === "APPROVED") {
-      await expireOfferToShortlist(candidate.id, "APPROVED");
+    if (application.stage === "APPROVED") {
+      await expireOfferToShortlist(application.id, "APPROVED");
     }
     return (
       <TerminalCard

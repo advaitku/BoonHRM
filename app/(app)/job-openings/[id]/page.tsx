@@ -42,11 +42,15 @@ export default async function JobOpeningPage({
   const opening = await prisma.jobOpening.findUnique({
     where: { id },
     include: {
-      candidates: {
+      applications: {
         orderBy: { stageEnteredAt: "asc" },
         include: {
-          tags: { include: { tag: true } },
-          _count: { select: { comments: true, resumes: true } },
+          candidate: {
+            include: {
+              tags: { include: { tag: true } },
+              _count: { select: { comments: true, resumes: true } },
+            },
+          },
         },
       },
     },
@@ -151,7 +155,7 @@ export default async function JobOpeningPage({
         </div>
       </div>
 
-      {opening.candidates.length === 0 ? (
+      {opening.applications.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No candidates yet — add the first one to start the pipeline.
@@ -165,21 +169,22 @@ export default async function JobOpeningPage({
             inPersonInterviewUrl: opening.inPersonInterviewUrl,
             autoNotify: opening.autoNotify,
           }}
-          candidates={opening.candidates.map((c) => ({
-            id: c.id,
-            fullName: c.fullName,
-            email: c.email,
-            phone: c.phone,
-            stage: c.stage,
-            stageEnteredAt: c.stageEnteredAt.toISOString(),
-            hasResume: c._count.resumes > 0,
-            rejectionType: c.rejectionType,
-            tags: c.tags.map((t) => ({
+          candidates={opening.applications.map((a) => ({
+            id: a.id,
+            candidateId: a.candidate.id,
+            fullName: a.candidate.fullName,
+            email: a.candidate.email,
+            phone: a.candidate.phone,
+            stage: a.stage,
+            stageEnteredAt: a.stageEnteredAt.toISOString(),
+            hasResume: a.candidate._count.resumes > 0,
+            rejectionType: a.rejectionType,
+            tags: a.candidate.tags.map((t) => ({
               id: t.tag.id,
               name: t.tag.name,
               color: t.tag.color,
             })),
-            commentCount: c._count.comments,
+            commentCount: a.candidate._count.comments,
           }))}
         />
       )}

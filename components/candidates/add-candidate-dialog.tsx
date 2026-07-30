@@ -3,7 +3,15 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileText, Loader2, Upload, UserPlus, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Upload,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { createCandidate } from "@/lib/actions/candidates";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,19 +32,30 @@ import { cn } from "@/lib/utils";
 const ACCEPTED =
   ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
+const MAX_FILES = 10;
+
+type FileStatus = "queued" | "uploading" | "done" | "error";
+
+type QueuedFile = {
+  file: File;
+  status: FileStatus;
+  error?: string;
+  candidateId?: string;
+};
+
 export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   // Resume tab state
-  const [file, setFile] = useState<File | null>(null);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function reset() {
-    setFile(null);
+    setQueue([]);
     setDragOver(false);
   }
 
@@ -55,68 +74,121 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
     });
   }
 
-  async function submitResume(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!file) return;
-    const nameOverride = new FormData(e.currentTarget).get("fullName");
-
-    setUploading(true);
+  async function uploadOne(
+    entry: QueuedFile,
+    nameOverride: string,
+  ): Promise<QueuedFile> {
     try {
       const body = new FormData();
       body.set("jobOpeningId", jobOpeningId);
-      body.set("file", file);
-      if (nameOverride) body.set("fullName", String(nameOverride));
+      body.set("file", entry.file);
+      if (nameOverride) body.set("fullName", nameOverride);
 
       const res = await fetch("/api/candidates", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Upload failed");
-        return;
+        return { ...entry, status: "error", error: data.error ?? "Upload failed" };
       }
-      const picked = [
-        data.email && "email",
-        data.phone && "phone",
-        data.address && "address",
-        data.workHistory && "experience",
-        data.education && "education",
-      ].filter(Boolean);
-      toast.success(
-        picked.length > 0
-          ? `Candidate created — picked up ${picked.join(", ")} from the resume`
-          : "Candidate created — review and complete the profile",
-      );
-      setOpen(false);
-      reset();
-      router.push(`/candidates/${data.id}`);
-      router.refresh();
+      return { ...entry, status: "done", candidateId: data.id };
     } catch {
-      toast.error("Upload failed — is the server running?");
-    } finally {
-      setUploading(false);
+      return {
+        ...entry,
+        status: "error",
+        error: "Upload failed — is the server running?",
+      };
     }
   }
 
-  function pickFile(f: File | undefined | null) {
-    if (!f) return;
-    const ok =
-      f.type === "application/pdf" ||
-      f.type ===
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    if (!ok) {
-      toast.error("Only PDF or DOCX resumes are supported");
-      return;
+  async function submitResumes(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (queue.length === 0) return;
+    // The name override only makes sense for a single resume.
+    const nameOverride =
+      queue.length === 1
+        ? String(new FormData(e.currentTarget).get("fullName") ?? "").trim()
+        : "";
+
+    setUploading(true);
+    const results: QueuedFile[] = [...queue];
+    try {
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === "done") continue;
+        results[i] = { ...results[i], status: "uploading" };
+        setQueue([...results]);
+        results[i] = await uploadOne(results[i], nameOverride);
+        setQueue([...results]);
+      }
+    } finally {
+      setUploading(false);
     }
-    if (f.size > 10 * 1024 * 1024) {
-      toast.error("Resume must be 10 MB or smaller");
-      return;
+
+    const done = results.filter((r) => r.status === "done");
+    const failed = results.filter((r) => r.status === "error");
+
+    if (failed.length === 0) {
+      toast.success(
+        done.length === 1
+          ? "Candidate created from resume"
+          : `${done.length} candidates created from resumes`,
+      );
+      setOpen(false);
+      reset();
+      if (done.length === 1 && done[0].candidateId) {
+        router.push(`/candidates/${done[0].candidateId}`);
+      }
+      router.refresh();
+    } else {
+      toast.error(
+        done.length > 0
+          ? `${done.length} created, ${failed.length} failed — failed files stay in the list`
+          : `Upload failed for ${failed.length} file${failed.length > 1 ? "s" : ""}`,
+      );
+      // Keep only the failures so a retry doesn't duplicate the successes.
+      setQueue(results.filter((r) => r.status !== "done"));
+      if (done.length > 0) router.refresh();
     }
-    setFile(f);
   }
+
+  function pickFiles(list: FileList | File[] | null | undefined) {
+    if (!list) return;
+    const incoming = Array.from(list);
+    const next = [...queue];
+    for (const f of incoming) {
+      const ok =
+        f.type === "application/pdf" ||
+        f.type ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      if (!ok) {
+        toast.error(`${f.name}: only PDF or DOCX resumes are supported`);
+        continue;
+      }
+      if (f.size > 3 * 1024 * 1024) {
+        toast.error(`${f.name}: resume must be 3 MB or smaller`);
+        continue;
+      }
+      if (next.some((q) => q.file.name === f.name && q.file.size === f.size)) {
+        continue; // already queued
+      }
+      if (next.length >= MAX_FILES) {
+        toast.error(`Up to ${MAX_FILES} resumes at a time`);
+        break;
+      }
+      next.push({ file: f, status: "queued" });
+    }
+    setQueue(next);
+  }
+
+  function removeAt(index: number) {
+    setQueue((q) => q.filter((_, i) => i !== index));
+  }
+
+  const queuedCount = queue.filter((q) => q.status !== "done").length;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
+        if (uploading) return; // don't close mid-upload
         setOpen(v);
         if (!v) reset();
       }}
@@ -137,34 +209,68 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
 
         <Tabs defaultValue="resume" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="resume">Upload resume</TabsTrigger>
+            <TabsTrigger value="resume">Upload resumes</TabsTrigger>
             <TabsTrigger value="form">Enter manually</TabsTrigger>
           </TabsList>
 
           <TabsContent value="resume" className="mt-4">
-            <form onSubmit={submitResume} className="space-y-4">
-              {file ? (
-                <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
-                  <FileText className="size-8 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024).toFixed(0)} KB — name, contact,
-                      address, experience & education are picked up when found
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setFile(null)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              ) : (
+            <form onSubmit={submitResumes} className="space-y-4">
+              {queue.length > 0 && (
+                <ul className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                  {queue.map((entry, i) => (
+                    <li
+                      key={`${entry.file.name}-${entry.file.size}`}
+                      className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3"
+                    >
+                      {entry.status === "uploading" ? (
+                        <Loader2 className="size-6 shrink-0 animate-spin text-muted-foreground" />
+                      ) : entry.status === "done" ? (
+                        <CheckCircle2 className="size-6 shrink-0 text-green-600" />
+                      ) : entry.status === "error" ? (
+                        <AlertCircle className="size-6 shrink-0 text-destructive" />
+                      ) : (
+                        <FileText className="size-6 shrink-0 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {entry.file.name}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-xs",
+                            entry.status === "error"
+                              ? "text-destructive"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {entry.status === "error"
+                            ? entry.error
+                            : entry.status === "uploading"
+                              ? "Extracting…"
+                              : entry.status === "done"
+                                ? "Candidate created"
+                                : `${(entry.file.size / 1024).toFixed(0)} KB`}
+                        </p>
+                      </div>
+                      {!uploading && entry.status !== "done" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAt(i)}
+                        >
+                          <X className="size-4" />
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {queue.length < MAX_FILES && (
                 <button
                   type="button"
+                  disabled={uploading}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -174,22 +280,30 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragOver(false);
-                    pickFile(e.dataTransfer.files?.[0]);
+                    pickFiles(e.dataTransfer.files);
                   }}
                   className={cn(
-                    "flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+                    "flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed text-center transition-colors",
+                    queue.length > 0 ? "p-4" : "p-8",
                     dragOver
                       ? "border-primary bg-primary/5"
                       : "border-muted-foreground/25 hover:border-muted-foreground/50",
                   )}
                 >
-                  <Upload className="size-8 text-muted-foreground" />
+                  <Upload
+                    className={cn(
+                      "text-muted-foreground",
+                      queue.length > 0 ? "size-5" : "size-8",
+                    )}
+                  />
                   <div>
                     <p className="text-sm font-medium">
-                      Drop a resume here or click to browse
+                      {queue.length > 0
+                        ? "Add more resumes"
+                        : "Drop resumes here or click to browse"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      PDF or DOCX, up to 10 MB
+                      PDF or DOCX, up to 3 MB each — max {MAX_FILES} at a time
                     </p>
                   </div>
                 </button>
@@ -198,25 +312,44 @@ export function AddCandidateDialog({ jobOpeningId }: { jobOpeningId: string }) {
                 ref={fileInputRef}
                 type="file"
                 accept={ACCEPTED}
+                multiple
                 className="hidden"
-                onChange={(e) => pickFile(e.target.files?.[0])}
+                onChange={(e) => {
+                  pickFiles(e.target.files);
+                  e.target.value = "";
+                }}
               />
 
-              <div className="space-y-2">
-                <Label htmlFor="resume-fullName">
-                  Candidate name{" "}
-                  <span className="text-muted-foreground">(optional — guessed from the resume)</span>
-                </Label>
-                <Input id="resume-fullName" name="fullName" placeholder="e.g. Priya Sharma" />
-              </div>
+              {queue.length === 1 && (
+                <div className="space-y-2">
+                  <Label htmlFor="resume-fullName">
+                    Candidate name{" "}
+                    <span className="text-muted-foreground">
+                      (optional — guessed from the resume)
+                    </span>
+                  </Label>
+                  <Input
+                    id="resume-fullName"
+                    name="fullName"
+                    placeholder="e.g. Priya Sharma"
+                  />
+                </div>
+              )}
 
               <DialogFooter>
-                <Button type="submit" disabled={!file || uploading} className="w-full">
+                <Button
+                  type="submit"
+                  disabled={queuedCount === 0 || uploading}
+                  className="w-full"
+                >
                   {uploading ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Extracting…
+                      Uploading {queue.filter((q) => q.status === "done").length}/
+                      {queue.length}…
                     </>
+                  ) : queuedCount > 1 ? (
+                    `Create ${queuedCount} candidates from resumes`
                   ) : (
                     "Create from resume"
                   )}

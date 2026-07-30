@@ -7,6 +7,52 @@ identified at a glance.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-30
+
+### Added
+- Job openings can now be assigned to a team member. A small initials badge
+  (e.g. "AB" for Ann Ban) shows who's on it on the job-openings list, and an
+  assignee picker is available on the opening's own page.
+- Filter and sort controls on the job-openings list (status, assignee,
+  newest/oldest/title/most candidates), plus a card/table view toggle.
+- Candidates inside a job opening can now be viewed as a table (name, stage,
+  contact, tags, time in stage) as an alternative to the Kanban board, via a
+  view toggle.
+- Job openings can have a **position closure deadline** (shown on the list and
+  the opening page, flagged red once it passes) and an **interview
+  deadline** — when set, it's appended as a line in the interview invite
+  email ("Please complete this interview by …").
+- New **Support email** setting (Settings → General). Every outbound email
+  now ends with an auto-generated-email disclaimer ("please do not reply —
+  for support, contact …"). The interview/approval templates' default
+  "reply to this email" wording was replaced with a reference to that
+  support contact instead, so the two aren't contradictory (not every mail
+  provider — e.g. Amazon SES — routes replies to a monitored inbox).
+
+## [0.3.0] - 2026-07-30
+
+### Fixed
+- Recruiting emails (OTP, interview invite, rejection, approval, offer link)
+  were landing in spam. Every send now includes a plain-text alternative
+  alongside the HTML — HTML-only mail is penalized by Gmail/Outlook/O365 spam
+  filters. Also dropped the leading numeric code from the offer-verification
+  subject line (`"123456 is your..."` reads as a phishing pattern to mail
+  filters); it now matches the login OTP's non-code-leading subject style.
+- Deliverability also depends on domain authentication (SPF/DKIM/DMARC for
+  the sending domain) and sender reputation, which are DNS/mailbox-provider
+  settings outside the app — see `docs/GMAIL-SETUP.md`.
+
+### Added
+- Sign-in codes (login OTP, offer verification) and recruiting mail
+  (interview/rejection/approval) are now two independent mail channels,
+  each with its own Settings → Email tab and SMTP/Graph config. Changing
+  where recruiting mail goes (e.g. switching to Amazon SES) can no longer
+  accidentally affect login. A channel with no explicit settings falls back
+  to the same env vars as before, so existing single-provider deployments
+  are unaffected.
+- The generic SMTP sender already supports any SMTP provider, including
+  Amazon SES — documented in `docs/GMAIL-SETUP.md` alongside Gmail/Workspace.
+
 ## [0.2.0] - 2026-07-27
 
 ### Fixed

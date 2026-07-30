@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Clock, FileText, Mail, MessageSquare, Phone } from "lucide-react";
 import type { BoardCandidate } from "@/components/kanban/board-types";
 import { daysSince } from "@/components/kanban/board-types";
+import { getInitials } from "@/lib/initials";
 import { tagChipClass } from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
 
@@ -20,11 +21,7 @@ export function CandidateCard({
     useDraggable({ id: candidate.id, disabled: overlay });
 
   const days = daysSince(candidate.stageEnteredAt);
-  const initials = candidate.fullName
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
+  const initials = getInitials(candidate.fullName);
 
   return (
     <div
@@ -48,7 +45,7 @@ export function CandidateCard({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-1.5">
             <Link
-              href={`/candidates/${candidate.id}`}
+              href={`/candidates/${candidate.candidateId}`}
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
               className="truncate text-sm font-medium hover:underline"

@@ -1,23 +1,27 @@
 import Link from "next/link";
-import { Briefcase, MapPin, Plus, Users } from "lucide-react";
+import { Briefcase, Plus } from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
-import { ALL_STAGES, STAGE_ACCENTS, STAGE_LABELS } from "@/lib/stages";
-import type { Stage } from "@/lib/generated/prisma/enums";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { JobOpeningsBoard } from "@/components/job-openings/job-openings-board";
 
 export default async function JobOpeningsPage() {
   await requireUser();
 
-  const openings = await prisma.jobOpening.findMany({
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    include: {
-      candidates: { select: { stage: true } },
-    },
-  });
+  const [openings, teamUsers] = await Promise.all([
+    prisma.jobOpening.findMany({
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      include: {
+        candidates: { select: { stage: true } },
+      },
+    }),
+    prisma.user.findMany({
+      where: { banned: false },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -59,87 +63,21 @@ export default async function JobOpeningsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {openings.map((opening) => {
-            const counts = countByStage(opening.candidates.map((c) => c.stage));
-            const total = opening.candidates.length;
-            const closed = opening.status === "CLOSED";
-            return (
-              <Link key={opening.id} href={`/job-openings/${opening.id}`}>
-                <Card
-                  className={cn(
-                    "h-full transition-all hover:-translate-y-0.5 hover:shadow-md",
-                    closed && "opacity-70",
-                  )}
-                >
-                  <CardHeader className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h2 className="font-semibold leading-snug">{opening.title}</h2>
-                      <Badge variant={closed ? "secondary" : "default"}>
-                        {closed ? "Closed" : "Open"}
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                      {opening.location && (
-                        <span className="inline-flex items-center gap-1">
-                          <MapPin className="size-3.5" />
-                          {opening.location}
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="size-3.5" />
-                        {opening.positions}{" "}
-                        {opening.positions === 1 ? "position" : "positions"}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="mt-auto space-y-3">
-                    {total > 0 ? (
-                      <>
-                        <div className="flex h-2 w-full overflow-hidden rounded-full bg-muted">
-                          {ALL_STAGES.filter((s) => counts[s] > 0).map((s) => (
-                            <div
-                              key={s}
-                              className={cn(STAGE_ACCENTS[s].dot)}
-                              style={{ width: `${(counts[s] / total) * 100}%` }}
-                            />
-                          ))}
-                        </div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          {ALL_STAGES.filter((s) => counts[s] > 0).map((s) => (
-                            <span key={s} className="inline-flex items-center gap-1.5">
-                              <span
-                                className={cn(
-                                  "size-2 rounded-full",
-                                  STAGE_ACCENTS[s].dot,
-                                )}
-                              />
-                              {STAGE_LABELS[s]} {counts[s]}
-                            </span>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No candidates yet
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+        <JobOpeningsBoard
+          openings={openings.map((o) => ({
+            id: o.id,
+            title: o.title,
+            location: o.location,
+            positions: o.positions,
+            status: o.status,
+            createdAt: o.createdAt.toISOString(),
+            assignedToId: o.assignedToId,
+            closureDeadline: o.closureDeadline ? o.closureDeadline.toISOString() : null,
+            stages: o.candidates.map((c) => c.stage),
+          }))}
+          users={teamUsers}
+        />
       )}
     </div>
   );
-}
-
-function countByStage(stages: Stage[]): Record<Stage, number> {
-  const counts = Object.fromEntries(ALL_STAGES.map((s) => [s, 0])) as Record<
-    Stage,
-    number
-  >;
-  for (const s of stages) counts[s]++;
-  return counts;
 }

@@ -1,19 +1,30 @@
 // Unified outbound mail transport. Configuration lives in Settings → Email
 // (AppSetting rows) with env vars as the fallback — see lib/settings.ts.
 //
-// Provider resolution ("auto"): SMTP creds -> smtp; else Graph creds -> graph;
-// else console (dev fallback that logs instead of sending).
+// Two independent channels, each resolved separately so one can never
+// silently affect the other:
+//  - "recruiting" : candidate-facing mail (interview invite, rejection,
+//                   approval). sendMail() / mailProvider() / mailConfigured().
+//  - "otp"        : sign-in / security codes (login OTP, offer verification).
+//                   sendOtpMail() / otpMailProvider() / otpMailConfigured().
 //
-// - smtp   : standard SMTP (e.g. Gmail with an App Password) via nodemailer.
-//            Records the SMTP Message-ID; Graph conversationId stays null,
-//            which V2 reply-threading tolerates (header-based fallback).
+// Provider resolution ("auto"): SMTP creds -> smtp; else Graph creds -> graph;
+// else console (dev fallback that logs instead of sending). Any standard SMTP
+// server works via the "smtp" provider — Gmail, Google Workspace, Amazon SES
+// (SMTP interface), etc. — just point smtpHost/Port/User/Pass at it.
+//
+// - smtp   : standard SMTP via nodemailer. Records the SMTP Message-ID;
+//            Graph conversationId stays null, which V2 reply-threading
+//            tolerates (header-based fallback).
 // - graph  : Microsoft 365 via Graph draft+send (captures conversationId).
-import { getMailSettings, type MailSettings } from "@/lib/settings";
+import { getMailSettings, getOtpMailSettings, type MailSettings } from "@/lib/settings";
 
 export interface MailInput {
   to: string;
   subject: string;
   html: string;
+  /** Plain-text alternative — HTML-only mail scores worse with spam filters. */
+  text?: string;
 }
 
 export interface MailResult {
@@ -40,17 +51,7 @@ export function resolveProvider(s: MailSettings): MailResult["provider"] {
   return "console";
 }
 
-export async function mailProvider(): Promise<MailResult["provider"]> {
-  return resolveProvider(await getMailSettings());
-}
-
-/** True when emails actually leave the machine. */
-export async function mailConfigured(): Promise<boolean> {
-  return (await mailProvider()) !== "console";
-}
-
-export async function sendMail(input: MailInput): Promise<MailResult> {
-  const settings = await getMailSettings();
+async function dispatch(settings: MailSettings, input: MailInput): Promise<MailResult> {
   const provider = resolveProvider(settings);
 
   if (provider === "smtp") {
@@ -79,4 +80,34 @@ export async function sendMail(input: MailInput): Promise<MailResult> {
     conversationId: null,
     internetMessageId: null,
   };
+}
+
+// --- Recruiting mail (candidate-facing) -------------------------------------
+
+export async function mailProvider(): Promise<MailResult["provider"]> {
+  return resolveProvider(await getMailSettings());
+}
+
+/** True when recruiting emails actually leave the machine. */
+export async function mailConfigured(): Promise<boolean> {
+  return (await mailProvider()) !== "console";
+}
+
+export async function sendMail(input: MailInput): Promise<MailResult> {
+  return dispatch(await getMailSettings(), input);
+}
+
+// --- Sign-in / security codes (OTP) -----------------------------------------
+
+export async function otpMailProvider(): Promise<MailResult["provider"]> {
+  return resolveProvider(await getOtpMailSettings());
+}
+
+/** True when OTP/security emails actually leave the machine. */
+export async function otpMailConfigured(): Promise<boolean> {
+  return (await otpMailProvider()) !== "console";
+}
+
+export async function sendOtpMail(input: MailInput): Promise<MailResult> {
+  return dispatch(await getOtpMailSettings(), input);
 }

@@ -23,14 +23,14 @@ export function generateOfferOtp(): string {
   return randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
-/** Codes are stored hashed, bound to the candidate so hashes aren't portable. */
-export function hashOfferOtp(candidateId: string, otp: string): string {
-  return createHash("sha256").update(`${candidateId}:${otp}`).digest("hex");
+/** Codes are stored hashed, bound to the application so hashes aren't portable. */
+export function hashOfferOtp(applicationId: string, otp: string): string {
+  return createHash("sha256").update(`${applicationId}:${otp}`).digest("hex");
 }
 
-export function otpHashMatches(storedHash: string, candidateId: string, otp: string): boolean {
+export function otpHashMatches(storedHash: string, applicationId: string, otp: string): boolean {
   const a = Buffer.from(storedHash, "hex");
-  const b = Buffer.from(hashOfferOtp(candidateId, otp), "hex");
+  const b = Buffer.from(hashOfferOtp(applicationId, otp), "hex");
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
@@ -41,16 +41,16 @@ export function offerUrl(token: string): string {
 
 export type OfferState = "pending" | "accepted" | "declined" | "expired";
 
-export function getOfferState(candidate: {
+export function getOfferState(application: {
   offerTokenExpiresAt: Date | null;
   offerAcceptedAt: Date | null;
   offerDeclinedAt: Date | null;
 }): OfferState {
-  if (candidate.offerAcceptedAt) return "accepted";
-  if (candidate.offerDeclinedAt) return "declined";
+  if (application.offerAcceptedAt) return "accepted";
+  if (application.offerDeclinedAt) return "declined";
   if (
-    !candidate.offerTokenExpiresAt ||
-    candidate.offerTokenExpiresAt.getTime() < Date.now()
+    !application.offerTokenExpiresAt ||
+    application.offerTokenExpiresAt.getTime() < Date.now()
   ) {
     return "expired";
   }
@@ -63,21 +63,21 @@ export function getOfferState(candidate: {
  * Used by both the daily sweep and the lazy request-time check.
  */
 export async function expireOfferToShortlist(
-  candidateId: string,
+  applicationId: string,
   fromStage: Stage,
 ): Promise<void> {
   await prisma.$transaction([
-    prisma.candidate.update({
-      where: { id: candidateId },
+    prisma.application.update({
+      where: { id: applicationId },
       data: {
         stage: "SHORTLIST",
         stageEnteredAt: new Date(),
         approvedAt: null,
       },
     }),
-    prisma.candidateStageHistory.create({
+    prisma.applicationStageHistory.create({
       data: {
-        candidateId,
+        applicationId,
         fromStage,
         toStage: "SHORTLIST",
         movedById: null, // system

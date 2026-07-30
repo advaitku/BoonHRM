@@ -8,7 +8,7 @@ import { sendStageEmail } from "@/lib/email/stage-emails";
 import { generateOfferToken, OFFER_TTL_DAYS } from "@/lib/offer";
 
 const moveSchema = z.object({
-  candidateId: z.string().min(1),
+  applicationId: z.string().min(1),
   toStage: z.enum(["POOL", "INTERVIEW", "SHORTLIST", "REJECTED", "APPROVED"]),
   // Required when moving to REJECTED
   rejectionType: z.enum(["CANDIDATE_DECLINED", "COMPANY_REJECTED"]).optional(),
@@ -27,7 +27,7 @@ const moveSchema = z.object({
 export type MoveInput = z.infer<typeof moveSchema>;
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-export async function moveCandidateStage(input: MoveInput): Promise<ActionResult> {
+export async function moveApplicationStage(input: MoveInput): Promise<ActionResult> {
   const session = await requireUser();
 
   const parsed = moveSchema.safeParse(input);
@@ -35,7 +35,7 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid move" };
   }
   const {
-    candidateId,
+    applicationId,
     toStage,
     rejectionType,
     rejectionReason,
@@ -45,13 +45,13 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
     sendEmail,
   } = parsed.data;
 
-  const candidate = await prisma.candidate.findUnique({
-    where: { id: candidateId },
+  const application = await prisma.application.findUnique({
+    where: { id: applicationId },
     include: { jobOpening: true },
   });
-  if (!candidate) return { ok: false, error: "Candidate not found" };
+  if (!application) return { ok: false, error: "Application not found" };
 
-  const fromStage = candidate.stage;
+  const fromStage = application.stage;
   if (fromStage === toStage) return { ok: true };
 
   if (toStage === "REJECTED" && !rejectionType) {
@@ -62,8 +62,8 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
   }
 
   await prisma.$transaction([
-    prisma.candidate.update({
-      where: { id: candidateId },
+    prisma.application.update({
+      where: { id: applicationId },
       data: {
         stage: toStage,
         stageEnteredAt: new Date(),
@@ -78,7 +78,7 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
         ...(toStage === "APPROVED"
           ? {
               approvedAt: new Date(),
-              ctcDetails: ctcDetails ?? candidate.ctcDetails,
+              ctcDetails: ctcDetails ?? application.ctcDetails,
               dateOfJoining: new Date(`${dateOfJoining}T00:00:00Z`),
               offerToken: generateOfferToken(),
               offerTokenExpiresAt: new Date(
@@ -92,9 +92,9 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
             : {}),
       },
     }),
-    prisma.candidateStageHistory.create({
+    prisma.applicationStageHistory.create({
       data: {
-        candidateId,
+        applicationId,
         fromStage,
         toStage,
         movedById: session.user.id,
@@ -107,7 +107,7 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
   // Email side effects (M6): interview invite / rejection / approval.
   try {
     await sendStageEmail({
-      candidateId,
+      applicationId,
       toStage,
       interviewUrlKind: interviewUrlKind ?? "none",
       ctcDetails: ctcDetails ?? null,
@@ -119,7 +119,7 @@ export async function moveCandidateStage(input: MoveInput): Promise<ActionResult
     console.error("Stage email failed (move already applied):", error);
   }
 
-  revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
-  revalidatePath(`/candidates/${candidateId}`);
+  revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  revalidatePath(`/candidates/${application.candidateId}`);
   return { ok: true };
 }

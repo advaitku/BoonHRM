@@ -10,9 +10,25 @@ export interface SmtpSendResult {
   internetMessageId: string | null;
 }
 
+/** Crude fallback for callers that don't build their own text version. */
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6])>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function sendSmtpMail(
   settings: MailSettings,
-  input: { to: string; subject: string; html: string },
+  input: { to: string; subject: string; html: string; text?: string },
 ): Promise<SmtpSendResult> {
   if (!settings.smtpHost || !settings.smtpUser || !settings.smtpPass) {
     throw new Error("SMTP is not configured (host/user/password missing)");
@@ -30,11 +46,14 @@ export async function sendSmtpMail(
     settings.mailFrom ||
     `${await getCompanyName()} <${settings.smtpUser}>`;
 
+  // Always send a text/plain alternative — HTML-only mail is a well-known
+  // spam-score penalty with Gmail/Outlook/O365 filters.
   const info = await transporter.sendMail({
     from,
     to: input.to,
     subject: input.subject,
     html: input.html,
+    text: input.text ?? htmlToPlainText(input.html),
   });
 
   // nodemailer returns the RFC 5322 Message-ID (e.g. "<abc@gmail.com>").

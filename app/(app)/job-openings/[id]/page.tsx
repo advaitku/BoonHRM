@@ -1,14 +1,35 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Bell, BellOff, Link2, MapPin, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bell,
+  BellOff,
+  CalendarClock,
+  Link2,
+  MapPin,
+  Users,
+} from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { OpeningActions } from "@/components/job-openings/opening-actions";
+import { AssigneePicker } from "@/components/job-openings/assignee-picker";
 import { AddCandidateDialog } from "@/components/candidates/add-candidate-dialog";
-import { KanbanBoard } from "@/components/kanban/kanban-board";
+import { OpeningCandidatesView } from "@/components/kanban/opening-candidates-view";
+import { cn } from "@/lib/utils";
+
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+function isPast(date: Date): boolean {
+  return date.getTime() < Date.now();
+}
 
 export default async function JobOpeningPage({
   params,
@@ -33,6 +54,11 @@ export default async function JobOpeningPage({
   if (!opening) notFound();
 
   const closed = opening.status === "CLOSED";
+  const teamUsers = await prisma.user.findMany({
+    where: { banned: false },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
   return (
     <div className="space-y-6">
@@ -68,6 +94,25 @@ export default async function JobOpeningPage({
               <Users className="size-3.5" />
               {opening.positions} {opening.positions === 1 ? "position" : "positions"}
             </span>
+            {opening.closureDeadline && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1",
+                  isPast(opening.closureDeadline) && "font-medium text-destructive",
+                )}
+              >
+                {isPast(opening.closureDeadline) && (
+                  <AlertTriangle className="size-3.5" />
+                )}
+                Closes {dateFmt.format(opening.closureDeadline)}
+              </span>
+            )}
+            {opening.interviewDeadline && (
+              <span className="inline-flex items-center gap-1">
+                <CalendarClock className="size-3.5" />
+                Interview by {dateFmt.format(opening.interviewDeadline)}
+              </span>
+            )}
             <span className="inline-flex items-center gap-1">
               {opening.autoNotify ? (
                 <>
@@ -96,6 +141,11 @@ export default async function JobOpeningPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <AssigneePicker
+            openingId={opening.id}
+            assignedToId={opening.assignedToId}
+            users={teamUsers}
+          />
           <AddCandidateDialog jobOpeningId={opening.id} />
           <OpeningActions openingId={opening.id} status={opening.status} />
         </div>
@@ -108,7 +158,7 @@ export default async function JobOpeningPage({
           </CardContent>
         </Card>
       ) : (
-        <KanbanBoard
+        <OpeningCandidatesView
           opening={{
             id: opening.id,
             onlineInterviewUrl: opening.onlineInterviewUrl,

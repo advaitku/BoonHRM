@@ -1,8 +1,8 @@
 // OTP delivery. When no mail provider is configured (local dev), the code is
 // printed to the server console instead — and captured for /api/dev/login.
-import { mailConfigured, sendMail } from "@/lib/email/transport";
+import { otpMailConfigured, sendOtpMail } from "@/lib/email/transport";
 
-export { mailConfigured, mailProvider } from "@/lib/email/transport";
+export { otpMailConfigured as mailConfigured, otpMailProvider as mailProvider } from "@/lib/email/transport";
 
 type OtpType =
   | "sign-in"
@@ -19,7 +19,7 @@ export async function sendOtpEmail({
   otp: string;
   type: OtpType;
 }): Promise<void> {
-  if (!(await mailConfigured())) {
+  if (!(await otpMailConfigured())) {
     console.log(
       `\n========================================\n[BoonHRM] OTP (${type}) for ${email}: ${otp}\n========================================\n`,
     );
@@ -31,6 +31,6 @@ export async function sendOtpEmail({
   }
 
   const { otpEmail } = await import("@/lib/email/templates");
-  const { subject, html } = await otpEmail(otp);
-  await sendMail({ to: email, subject, html });
+  const { subject, html, text } = await otpEmail(otp);
+  await sendOtpMail({ to: email, subject, html, text });
 }

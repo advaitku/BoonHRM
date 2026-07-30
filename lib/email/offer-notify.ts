@@ -10,11 +10,11 @@ export async function notifyOfferResponse(
   decision: "accepted" | "declined",
 ): Promise<void> {
   const to = await getNotificationEmail();
-  const { subject, html } = await offerResponseNotification({
+  const { subject, html, text } = await offerResponseNotification({
     candidateName: candidate.fullName,
     candidateEmail: candidate.email,
     jobTitle: candidate.jobOpening.title,
     decision,
   });
-  await sendMail({ to, subject, html });
+  await sendMail({ to, subject, html, text });
 }

@@ -66,3 +66,11 @@ options:
   when the resume's layout allows it (see `lib/resume.ts`); an AI-based parser
   remains a possible upgrade for harder layouts (scanned PDFs, two-column CVs).
 - Document upload + HR verification during onboarding (post-offer-acceptance).
+
+## Roadmap (final launch)
+
+BoonHRM won't stay a Boon-only internal tool. The end goal is a **multi-tenant
+ATS platform**: any company can sign up, create its own workspace, post job
+openings, and run its hiring pipeline here — while candidates get a public job
+board where they can browse and apply to openings across all participating
+companies.

@@ -39,6 +39,8 @@ export interface JobOpeningFormValues {
   onlineInterviewUrl: string;
   inPersonInterviewUrl: string;
   autoNotify: boolean;
+  closureDeadline: string; // yyyy-mm-dd
+  interviewDeadline: string; // yyyy-mm-dd
 }
 
 const DEFAULTS: JobOpeningFormValues = {
@@ -50,6 +52,8 @@ const DEFAULTS: JobOpeningFormValues = {
   onlineInterviewUrl: "",
   inPersonInterviewUrl: "",
   autoNotify: true,
+  closureDeadline: "",
+  interviewDeadline: "",
 };
 
 export function JobOpeningForm({
@@ -157,6 +161,19 @@ export function JobOpeningForm({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="closureDeadline">Position closure deadline</Label>
+            <Input
+              id="closureDeadline"
+              name="closureDeadline"
+              type="date"
+              defaultValue={values.closureDeadline}
+            />
+            <p className="text-xs text-muted-foreground">
+              Shown on the opening card, flagged red once it passes.
+            </p>
+          </div>
+
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
@@ -201,6 +218,19 @@ export function JobOpeningForm({
               placeholder="https://maps.google.com/… or a booking link"
               defaultValue={values.inPersonInterviewUrl}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="interviewDeadline">Complete interview by</Label>
+            <Input
+              id="interviewDeadline"
+              name="interviewDeadline"
+              type="date"
+              defaultValue={values.interviewDeadline}
+            />
+            <p className="text-xs text-muted-foreground">
+              Included in the interview invite email, if set.
+            </p>
           </div>
 
           <Separator className="sm:col-span-2" />

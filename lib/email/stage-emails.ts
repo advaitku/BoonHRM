@@ -9,7 +9,7 @@ import type {
 } from "@/lib/generated/prisma/enums";
 
 export interface StageEmailInput {
-  candidateId: string;
+  applicationId: string;
   toStage: Stage;
   interviewUrlKind: "online" | "inPerson" | "none";
   ctcDetails: string | null;
@@ -21,7 +21,7 @@ export interface StageEmailInput {
 
 /**
  * Sends the stage-transition email (interview invite / rejection / approval)
- * and records it on the candidate's email thread.
+ * and records it on the application's email thread.
  *
  * Send rules:
  *  - INTERVIEW: only when the dialog chose a URL (explicitSend).
@@ -30,16 +30,17 @@ export interface StageEmailInput {
  *  - POOL / SHORTLIST: never.
  */
 export async function sendStageEmail(input: StageEmailInput): Promise<void> {
-  const candidate = await prisma.candidate.findUnique({
-    where: { id: input.candidateId },
-    include: { jobOpening: true },
+  const application = await prisma.application.findUnique({
+    where: { id: input.applicationId },
+    include: { candidate: true, jobOpening: true },
   });
-  if (!candidate?.email) return;
+  if (!application?.candidate.email) return;
 
-  const opening = candidate.jobOpening;
+  const { candidate, jobOpening: opening } = application;
   let mailType: MailType;
   let subject: string;
   let html: string;
+  let text: string;
 
   switch (input.toStage) {
     case "INTERVIEW": {
@@ -49,18 +50,19 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
           ? opening.onlineInterviewUrl
           : opening.inPersonInterviewUrl;
       if (!url) return;
-      ({ subject, html } = await renderCandidateEmail("INTERVIEW_INVITE", {
+      ({ subject, html, text } = await renderCandidateEmail("INTERVIEW_INVITE", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
         interviewUrl: url,
         interviewKind: input.interviewUrlKind,
+        interviewDeadline: opening.interviewDeadline,
       }));
       mailType = "INTERVIEW_INVITE";
       break;
     }
     case "REJECTED": {
       if (!opening.autoNotify) return;
-      ({ subject, html } = await renderCandidateEmail("REJECTION", {
+      ({ subject, html, text } = await renderCandidateEmail("REJECTION", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
       }));
@@ -69,12 +71,12 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
     }
     case "APPROVED": {
       if (input.explicitSend === false) return;
-      if (!candidate.offerToken) return; // no live offer link, nothing to send
-      const url = offerUrl(candidate.offerToken);
+      if (!application.offerToken) return; // no live offer link, nothing to send
+      const url = offerUrl(application.offerToken);
       if (!(await mailConfigured())) {
         console.log(`\n[BoonHRM] (dev) offer link for ${candidate.fullName}: ${url}\n`);
       }
-      ({ subject, html } = await renderCandidateEmail("APPROVAL", {
+      ({ subject, html, text } = await renderCandidateEmail("APPROVAL", {
         candidateName: candidate.fullName,
         jobTitle: opening.title,
         offerUrl: url,
@@ -87,37 +89,40 @@ export async function sendStageEmail(input: StageEmailInput): Promise<void> {
   }
 
   await deliverCandidateEmail({
-    candidateId: candidate.id,
+    applicationId: application.id,
     to: candidate.email,
     subject,
     html,
+    text,
     mailType,
   });
 }
 
 /**
  * Shared delivery: sends via the configured provider — Gmail/SMTP or Microsoft
- * Graph (console in dev) — and records an EmailMessage on the candidate's
+ * Graph (console in dev) — and records an EmailMessage on the application's
  * thread. Graph additionally captures conversationId for V2 reply-threading;
  * SMTP sends record the Message-ID header for the header-based fallback.
  */
 export async function deliverCandidateEmail(opts: {
-  candidateId: string;
+  applicationId: string;
   to: string;
   subject: string;
   html: string;
+  text?: string;
   mailType: MailType;
 }): Promise<void> {
   const { graphMessageId, conversationId, internetMessageId } = await sendMail({
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
+    text: opts.text,
   });
 
   const thread = await prisma.emailThread.upsert({
-    where: { candidateId: opts.candidateId },
+    where: { applicationId: opts.applicationId },
     create: {
-      candidateId: opts.candidateId,
+      applicationId: opts.applicationId,
       subject: opts.subject,
       conversationId,
     },

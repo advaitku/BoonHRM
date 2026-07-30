@@ -10,6 +10,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import { getInitials } from "@/lib/initials";
 import {
   Sidebar,
   SidebarContent,
@@ -50,11 +51,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
       : []),
   ];
 
-  const initials = user.name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w.charAt(0).toUpperCase())
-    .join("");
+  const initials = getInitials(user.name);
 
   return (
     <Sidebar collapsible="offcanvas">

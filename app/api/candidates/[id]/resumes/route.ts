@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
   if (file.size > MAX_RESUME_BYTES) {
-    return NextResponse.json({ error: "Resume must be 10 MB or smaller" }, { status: 413 });
+    return NextResponse.json({ error: "Resume must be 3 MB or smaller" }, { status: 413 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());

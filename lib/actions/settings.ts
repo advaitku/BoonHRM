@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { SETTING_KEYS, getCompanyName, setSetting } from "@/lib/settings";
+import { OTP_SETTING_KEYS, SETTING_KEYS, getCompanyName, setSetting } from "@/lib/settings";
 import { DEFAULT_TEMPLATES } from "@/lib/email/templates";
-import { mailProvider, sendMail } from "@/lib/email/transport";
+import { mailProvider, otpMailProvider, sendMail, sendOtpMail } from "@/lib/email/transport";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+const emptyToUndefined = (v: unknown) =>
+  typeof v === "string" && v.trim() === "" ? undefined : v;
 
 const generalSchema = z.object({
   companyName: z.string().trim().min(1, "Company name is required").max(120),
@@ -22,6 +25,10 @@ const generalSchema = z.object({
     .trim()
     .email("Enter a valid notification email")
     .max(200),
+  supportEmail: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().email("Enter a valid support email").max(200).optional(),
+  ),
 });
 
 export async function saveGeneralSettings(formData: FormData): Promise<ActionResult> {
@@ -30,6 +37,7 @@ export async function saveGeneralSettings(formData: FormData): Promise<ActionRes
     companyName: formData.get("companyName"),
     autoRejectDays: formData.get("autoRejectDays"),
     notificationEmail: formData.get("notificationEmail"),
+    supportEmail: formData.get("supportEmail"),
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
@@ -37,6 +45,7 @@ export async function saveGeneralSettings(formData: FormData): Promise<ActionRes
   await setSetting(SETTING_KEYS.companyName, parsed.data.companyName);
   await setSetting(SETTING_KEYS.autoRejectDays, String(parsed.data.autoRejectDays));
   await setSetting(SETTING_KEYS.notificationEmail, parsed.data.notificationEmail);
+  await setSetting(SETTING_KEYS.supportEmail, parsed.data.supportEmail ?? "");
   revalidatePath("/admin/settings");
   return { ok: true };
 }
@@ -85,8 +94,10 @@ const emailSettingsSchema = z.object({
   careersMailbox: z.string().trim().max(200),
 });
 
-export async function saveEmailSettings(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+async function saveMailSettings(
+  keys: typeof SETTING_KEYS | typeof OTP_SETTING_KEYS,
+  formData: FormData,
+): Promise<ActionResult> {
   const parsed = emailSettingsSchema.safeParse({
     provider: formData.get("provider"),
     smtpHost: formData.get("smtpHost"),
@@ -104,47 +115,75 @@ export async function saveEmailSettings(formData: FormData): Promise<ActionResul
   }
   const d = parsed.data;
 
-  await setSetting(SETTING_KEYS.mailProvider, d.provider);
-  await setSetting(SETTING_KEYS.smtpHost, d.smtpHost);
-  await setSetting(SETTING_KEYS.smtpPort, String(d.smtpPort));
-  await setSetting(SETTING_KEYS.smtpUser, d.smtpUser);
-  await setSetting(SETTING_KEYS.mailFrom, d.mailFrom);
-  await setSetting(SETTING_KEYS.msTenantId, d.msTenantId);
-  await setSetting(SETTING_KEYS.msClientId, d.msClientId);
-  await setSetting(SETTING_KEYS.careersMailbox, d.careersMailbox);
+  await setSetting(keys.mailProvider, d.provider);
+  await setSetting(keys.smtpHost, d.smtpHost);
+  await setSetting(keys.smtpPort, String(d.smtpPort));
+  await setSetting(keys.smtpUser, d.smtpUser);
+  await setSetting(keys.mailFrom, d.mailFrom);
+  await setSetting(keys.msTenantId, d.msTenantId);
+  await setSetting(keys.msClientId, d.msClientId);
+  await setSetting(keys.careersMailbox, d.careersMailbox);
   // Secrets are only overwritten when a new value was typed.
-  if (d.smtpPass) await setSetting(SETTING_KEYS.smtpPass, d.smtpPass);
-  if (d.msClientSecret) await setSetting(SETTING_KEYS.msClientSecret, d.msClientSecret);
+  if (d.smtpPass) await setSetting(keys.smtpPass, d.smtpPass);
+  if (d.msClientSecret) await setSetting(keys.msClientSecret, d.msClientSecret);
 
   revalidatePath("/admin/settings");
   return { ok: true };
 }
 
-export async function sendTestEmail(): Promise<
-  { ok: true; provider: string; to: string } | { ok: false; error: string }
-> {
-  const session = await requireAdmin();
-  const to = session.user.email;
+/** Recruiting mail: interview invite, rejection, approval. */
+export async function saveEmailSettings(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return saveMailSettings(SETTING_KEYS, formData);
+}
+
+/** Sign-in / security codes: login OTP, offer-page verification code. */
+export async function saveOtpMailSettings(formData: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return saveMailSettings(OTP_SETTING_KEYS, formData);
+}
+
+async function testMail(
+  channel: "recruiting" | "otp",
+  to: string,
+): Promise<{ ok: true; provider: string; to: string } | { ok: false; error: string }> {
   try {
-    const provider = await mailProvider();
+    const provider = channel === "otp" ? await otpMailProvider() : await mailProvider();
     if (provider === "console") {
       return {
         ok: false,
         error:
-          "No mail provider is configured — fill in the SMTP (or Graph) fields and save first.",
+          "No mail provider is configured for this channel — fill in the SMTP (or Graph) fields and save first.",
       };
     }
     const companyName = await getCompanyName();
-    await sendMail({
+    const label = channel === "otp" ? "sign-in / security codes" : "recruiting mail";
+    const send = channel === "otp" ? sendOtpMail : sendMail;
+    await send({
       to,
-      subject: `${companyName} — test email from BoonHRM`,
-      html: `<p>This is a test email from BoonHRM.</p><p>Provider: <strong>${provider}</strong> · sent to ${to}.</p><p>If you're reading this, outbound email is working. 🎉</p>`,
+      subject: `${companyName} — test email from BoonHRM (${label})`,
+      html: `<p>This is a test email from BoonHRM's <strong>${label}</strong> channel.</p><p>Provider: <strong>${provider}</strong> · sent to ${to}.</p><p>If you're reading this, outbound email is working. 🎉</p>`,
+      text: `This is a test email from BoonHRM's ${label} channel.\n\nProvider: ${provider} · sent to ${to}.\n\nIf you're reading this, outbound email is working.`,
     });
     return { ok: true, provider, to };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Send failed";
     return { ok: false, error: message };
   }
+}
+
+export async function sendTestEmail(): Promise<
+  { ok: true; provider: string; to: string } | { ok: false; error: string }
+> {
+  const session = await requireAdmin();
+  return testMail("recruiting", session.user.email);
+}
+
+export async function sendOtpTestEmail(): Promise<
+  { ok: true; provider: string; to: string } | { ok: false; error: string }
+> {
+  const session = await requireAdmin();
+  return testMail("otp", session.user.email);
 }
 
 const templateSchema = z.object({

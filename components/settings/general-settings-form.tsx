@@ -12,10 +12,12 @@ export function GeneralSettingsForm({
   companyName,
   autoRejectDays,
   notificationEmail,
+  supportEmail,
 }: {
   companyName: string;
   autoRejectDays: number;
   notificationEmail: string;
+  supportEmail: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -78,6 +80,20 @@ export function GeneralSettingsForm({
         />
         <p className="text-xs text-muted-foreground">
           Internal inbox that receives offer accept/decline notifications.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="supportEmail">Support email</Label>
+        <Input
+          id="supportEmail"
+          name="supportEmail"
+          type="email"
+          defaultValue={supportEmail}
+          maxLength={200}
+        />
+        <p className="text-xs text-muted-foreground">
+          Shown to candidates in the auto-generated-email footer on every
+          outbound email. Leave blank to omit the contact line.
         </p>
       </div>
       <Button type="submit" disabled={pending}>

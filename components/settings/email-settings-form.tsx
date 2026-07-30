@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
-import { saveEmailSettings, sendTestEmail } from "@/lib/actions/settings";
+import {
+  saveEmailSettings,
+  saveOtpMailSettings,
+  sendOtpTestEmail,
+  sendTestEmail,
+} from "@/lib/actions/settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,18 +37,27 @@ export interface EmailSettingsValues {
   careersMailbox: string;
 }
 
-export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues }) {
+export function EmailSettingsForm({
+  initial,
+  channel = "recruiting",
+}: {
+  initial: EmailSettingsValues;
+  /** Which independent mail channel this form edits — see lib/settings.ts. */
+  channel?: "recruiting" | "otp";
+}) {
   const router = useRouter();
   const [provider, setProvider] = useState(initial.provider);
   const [pending, startTransition] = useTransition();
   const [testing, startTesting] = useTransition();
+  const save = channel === "otp" ? saveOtpMailSettings : saveEmailSettings;
+  const test = channel === "otp" ? sendOtpTestEmail : sendTestEmail;
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set("provider", provider);
     startTransition(async () => {
-      const result = await saveEmailSettings(formData);
+      const result = await save(formData);
       if (result.ok) {
         toast.success("Email settings saved");
         router.refresh();
@@ -55,7 +69,7 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
 
   function onTest() {
     startTesting(async () => {
-      const result = await sendTestEmail();
+      const result = await test();
       if (result.ok) {
         toast.success(`Test email sent to ${result.to} via ${result.provider}`);
       } else {
@@ -81,7 +95,7 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="auto">Auto-detect (recommended)</SelectItem>
-              <SelectItem value="smtp">Gmail / SMTP</SelectItem>
+              <SelectItem value="smtp">SMTP (Gmail, Workspace, Amazon SES, …)</SelectItem>
               <SelectItem value="graph">Microsoft 365 (Graph)</SelectItem>
               <SelectItem value="console">Console (dev — don&apos;t send)</SelectItem>
             </SelectContent>
@@ -114,10 +128,14 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
           <Separator />
           <div className="space-y-4">
             <div>
-              <h3 className="text-sm font-semibold">Gmail / SMTP</h3>
+              <h3 className="text-sm font-semibold">SMTP</h3>
               <p className="text-xs text-muted-foreground">
-                For Gmail: enable 2-Step Verification, then create an App
-                Password (myaccount.google.com/apppasswords) and use it below.
+                Works with any standard SMTP server. For Gmail/Workspace:
+                enable 2-Step Verification, then create an App Password
+                (myaccount.google.com/apppasswords). For Amazon SES: create
+                SMTP credentials in the SES console (these are separate from
+                your AWS access key) and use the region&apos;s SMTP endpoint,
+                e.g. <code>email-smtp.us-east-1.amazonaws.com</code>.
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -126,7 +144,7 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
                 <Input
                   id="smtpHost"
                   name="smtpHost"
-                  placeholder="smtp.gmail.com"
+                  placeholder="smtp.gmail.com / email-smtp.us-east-1.amazonaws.com"
                   defaultValue={initial.smtpHost}
                 />
               </div>
@@ -142,23 +160,22 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="smtpUser">Email address (SMTP user)</Label>
+                <Label htmlFor="smtpUser">SMTP username</Label>
                 <Input
                   id="smtpUser"
                   name="smtpUser"
-                  type="email"
-                  placeholder="recruiting@yourcompany.com"
+                  placeholder="recruiting@yourcompany.com / SES SMTP username"
                   defaultValue={initial.smtpUser}
                   autoComplete="off"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="smtpPass">App password</Label>
+                <Label htmlFor="smtpPass">SMTP password</Label>
                 <Input
                   id="smtpPass"
                   name="smtpPass"
                   type="password"
-                  placeholder={initial.hasSmtpPass ? "•••••••• (saved — leave blank to keep)" : "16-character app password"}
+                  placeholder={initial.hasSmtpPass ? "•••••••• (saved — leave blank to keep)" : "App password / SES SMTP password"}
                   autoComplete="new-password"
                 />
               </div>
@@ -171,8 +188,9 @@ export function EmailSettingsForm({ initial }: { initial: EmailSettingsValues })
                   defaultValue={initial.mailFrom}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Gmail always sends from the authenticated account; this sets
-                  the display name.
+                  Gmail always sends from the authenticated account, so there
+                  it only sets the display name. SES honors a verified
+                  From address here directly.
                 </p>
               </div>
             </div>

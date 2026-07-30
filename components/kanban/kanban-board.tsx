@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { toast } from "sonner";
 import type { Stage } from "@/lib/generated/prisma/enums";
-import { moveCandidateStage, type MoveInput } from "@/lib/actions/stage";
+import { moveApplicationStage, type MoveInput } from "@/lib/actions/stage";
 import { STAGE_LABELS } from "@/lib/stages";
 import type {
   BoardCandidate,
@@ -85,8 +85,8 @@ export function KanbanBoard({
   function commit(candidate: BoardCandidate, toStage: Stage, extras: Extras = {}) {
     setOverlay((prev) => ({ ...prev, [candidate.id]: toStage }));
     void (async () => {
-      const result = await moveCandidateStage({
-        candidateId: candidate.id,
+      const result = await moveApplicationStage({
+        applicationId: candidate.id,
         toStage,
         ...extras,
       });

@@ -138,28 +138,50 @@ model JobOpening {
   inPersonInterviewUrl String?    @db.Text
   autoNotify           Boolean    @default(true)
   createdById          String?
+  assignedToId         String? // Better Auth user id (plain scalar, same pattern as createdById)
+  closureDeadline      DateTime? // position closure deadline — flagged red on the list once passed
+  interviewDeadline    DateTime? // "complete your interview by" date, included in the invite email
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
 
-  candidates Candidate[]
+  applications Application[]
 
   @@index([status])
+  @@index([assignedToId])
 }
 
+// The person. Unique by email (nullable — resume parses may miss it; MySQL
+// unique indexes allow multiple NULLs). Pipeline state lives on Application.
 model Candidate {
-  id           String  @id @default(cuid())
-  jobOpeningId String
-  jobOpening   JobOpening @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
-
+  id       String  @id @default(cuid())
   fullName String
-  email    String?
+  email    String? @unique
   phone    String?
   address  String? @db.Text
 
   workHistory String? @db.Text // "last 2 jobs" — manual in V1, AI in V2
   education   String? @db.Text // manual in V1, AI in V2
 
-  resumes Resume[]
+  resumes      Resume[]
+  comments     CandidateComment[]
+  tags         CandidateTag[]
+  applications Application[]
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+// One candidate's run through one opening's pipeline. Hard rule: one
+// application per (candidate, opening), ever.
+model Application {
+  id           String     @id @default(cuid())
+  candidateId  String
+  candidate    Candidate  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobOpeningId String
+  jobOpening   JobOpening @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
 
   // Kanban state (server authoritative)
   stage          Stage    @default(POOL)
@@ -179,7 +201,7 @@ model Candidate {
   offerAcceptedAt     DateTime?
   offerDeclinedAt     DateTime?
   // Offer-page email OTP (proves inbox control before the offer unlocks)
-  offerOtpHash      String? // sha256(candidateId:code)
+  offerOtpHash      String? // sha256(applicationId:code)
   offerOtpExpiresAt DateTime?
   offerOtpAttempts  Int       @default(0)
 
@@ -187,13 +209,11 @@ model Candidate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  stageHistory CandidateStageHistory[]
+  stageHistory ApplicationStageHistory[]
   emailThread  EmailThread?
-  comments     CandidateComment[]
-  tags         CandidateTag[]
 
+  @@unique([candidateId, jobOpeningId])
   @@index([jobOpeningId, stage])
-  @@index([email])
   @@index([createdAt]) // for the 75-day sweep
 }
 
@@ -246,10 +266,10 @@ model CandidateTag {
   @@index([tagId])
 }
 
-model CandidateStageHistory {
-  id          String    @id @default(cuid())
-  candidateId String
-  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+model ApplicationStageHistory {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   fromStage       Stage?
   toStage         Stage
@@ -258,16 +278,16 @@ model CandidateStageHistory {
   rejectionReason String?        @db.Text
   createdAt       DateTime       @default(now())
 
-  @@index([candidateId, createdAt])
+  @@index([applicationId, createdAt])
 }
 
 model EmailThread {
-  id             String    @id @default(cuid())
-  candidateId    String    @unique
-  candidate      Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  conversationId String?   @unique // Graph thread id — stored in V1 for V2 threading
+  id             String      @id @default(cuid())
+  applicationId  String      @unique
+  application    Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  conversationId String?     @unique // Graph thread id — stored in V1 for V2 threading
   subject        String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime    @default(now())
 
   messages EmailMessage[]
 

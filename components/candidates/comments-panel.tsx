@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MessageSquare, Send, Trash2 } from "lucide-react";
 import { addComment, deleteComment } from "@/lib/actions/comments";
+import { getInitials } from "@/lib/initials";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -107,11 +108,7 @@ export function CommentsPanel({
       ) : (
         <ul className="space-y-3">
           {comments.map((c) => {
-            const initials = c.authorName
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((w) => w.charAt(0).toUpperCase())
-              .join("");
+            const initials = getInitials(c.authorName);
             const canDelete = isAdmin || c.authorId === currentUserId;
             return (
               <li key={c.id} className="flex gap-3">

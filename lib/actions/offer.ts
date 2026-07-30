@@ -20,7 +20,7 @@ import {
   OFFER_OTP_UNLOCKED_MINUTES,
 } from "@/lib/offer";
 import { getCompanyName, getOfferAgreement } from "@/lib/settings";
-import { sendMail } from "@/lib/email/transport";
+import { sendOtpMail } from "@/lib/email/transport";
 import { offerOtpEmail } from "@/lib/email/templates";
 import { notifyOfferResponse } from "@/lib/email/offer-notify";
 
@@ -65,11 +65,10 @@ const OTP_LOCKED =
   "Too many incorrect attempts. Please request a new code.";
 const OTP_WRONG = "Incorrect code. Please try again.";
 
-interface ResolvedCandidate {
+interface ResolvedApplication {
   id: string;
+  candidateId: string;
   jobOpeningId: string;
-  fullName: string;
-  email: string | null;
   stage: string;
   ctcDetails: string | null;
   dateOfJoining: Date | null;
@@ -79,6 +78,7 @@ interface ResolvedCandidate {
   offerOtpHash: string | null;
   offerOtpExpiresAt: Date | null;
   offerOtpAttempts: number;
+  candidate: { fullName: string; email: string | null };
   jobOpening: { title: string; location: string | null };
 }
 
@@ -86,16 +86,15 @@ async function resolveOffer(
   rawToken: string,
   rawEmail: string,
 ): Promise<
-  | { ok: true; candidate: ResolvedCandidate; state: "pending" | "accepted" | "declined" }
+  | { ok: true; application: ResolvedApplication; state: "pending" | "accepted" | "declined" }
   | { ok: false; error: string }
 > {
-  const candidate = await prisma.candidate.findUnique({
+  const application = await prisma.application.findUnique({
     where: { offerToken: rawToken },
     select: {
       id: true,
+      candidateId: true,
       jobOpeningId: true,
-      fullName: true,
-      email: true,
       stage: true,
       ctcDetails: true,
       dateOfJoining: true,
@@ -105,28 +104,29 @@ async function resolveOffer(
       offerOtpHash: true,
       offerOtpExpiresAt: true,
       offerOtpAttempts: true,
+      candidate: { select: { fullName: true, email: true } },
       jobOpening: { select: { title: true, location: true } },
     },
   });
-  if (!candidate) return { ok: false, error: GENERIC_INVALID };
+  if (!application) return { ok: false, error: GENERIC_INVALID };
 
-  const onFile = candidate.email?.trim().toLowerCase();
+  const onFile = application.candidate.email?.trim().toLowerCase();
   if (!onFile || onFile !== rawEmail.trim().toLowerCase()) {
     return { ok: false, error: GENERIC_MISMATCH };
   }
 
-  const state = getOfferState(candidate);
+  const state = getOfferState(application);
   if (state === "expired") {
     // Lazy expiry: don't wait for the daily sweep.
-    if (candidate.stage === "APPROVED") {
-      await expireOfferToShortlist(candidate.id, "APPROVED");
-      revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
-      revalidatePath(`/candidates/${candidate.id}`);
+    if (application.stage === "APPROVED") {
+      await expireOfferToShortlist(application.id, "APPROVED");
+      revalidatePath(`/job-openings/${application.jobOpeningId}`);
+      revalidatePath(`/candidates/${application.candidateId}`);
     }
     return { ok: false, error: GENERIC_EXPIRED };
   }
 
-  return { ok: true, candidate, state };
+  return { ok: true, application, state };
 }
 
 /**
@@ -135,25 +135,25 @@ async function resolveOffer(
  * force the candidate back through "Resend code".
  */
 async function checkOtp(
-  candidate: ResolvedCandidate,
+  application: ResolvedApplication,
   otp: string,
 ): Promise<string | null> {
   if (
-    !candidate.offerOtpHash ||
-    !candidate.offerOtpExpiresAt ||
-    candidate.offerOtpExpiresAt.getTime() < Date.now()
+    !application.offerOtpHash ||
+    !application.offerOtpExpiresAt ||
+    application.offerOtpExpiresAt.getTime() < Date.now()
   ) {
     return OTP_EXPIRED;
   }
-  if (candidate.offerOtpAttempts >= OFFER_OTP_MAX_ATTEMPTS) {
+  if (application.offerOtpAttempts >= OFFER_OTP_MAX_ATTEMPTS) {
     return OTP_LOCKED;
   }
-  if (!otpHashMatches(candidate.offerOtpHash, candidate.id, otp)) {
-    await prisma.candidate.update({
-      where: { id: candidate.id },
+  if (!otpHashMatches(application.offerOtpHash, application.id, otp)) {
+    await prisma.application.update({
+      where: { id: application.id },
       data: { offerOtpAttempts: { increment: 1 } },
     });
-    return candidate.offerOtpAttempts + 1 >= OFFER_OTP_MAX_ATTEMPTS
+    return application.offerOtpAttempts + 1 >= OFFER_OTP_MAX_ATTEMPTS
       ? OTP_LOCKED
       : OTP_WRONG;
   }
@@ -161,17 +161,17 @@ async function checkOtp(
 }
 
 async function toPayload(
-  candidate: ResolvedCandidate,
+  application: ResolvedApplication,
   state: "pending" | "accepted" | "declined",
 ): Promise<OfferPayload> {
   return {
     state,
-    candidateName: candidate.fullName,
-    jobTitle: candidate.jobOpening.title,
-    location: candidate.jobOpening.location,
-    ctcDetails: candidate.ctcDetails,
-    dateOfJoining: candidate.dateOfJoining
-      ? candidate.dateOfJoining.toISOString().slice(0, 10)
+    candidateName: application.candidate.fullName,
+    jobTitle: application.jobOpening.title,
+    location: application.jobOpening.location,
+    ctcDetails: application.ctcDetails,
+    dateOfJoining: application.dateOfJoining
+      ? application.dateOfJoining.toISOString().slice(0, 10)
       : null,
     agreement: await getOfferAgreement(),
     companyName: await getCompanyName(),
@@ -191,12 +191,12 @@ export async function requestOfferOtp(input: {
 
   const resolved = await resolveOffer(parsed.data.token, parsed.data.email);
   if (!resolved.ok) return { ok: false, error: resolved.error };
-  const { candidate } = resolved;
+  const { application } = resolved;
 
   // Soft rate limit: one code per minute (requestedAt = expiresAt - TTL).
-  if (candidate.offerOtpExpiresAt) {
+  if (application.offerOtpExpiresAt) {
     const requestedAt =
-      candidate.offerOtpExpiresAt.getTime() - OFFER_OTP_TTL_MINUTES * 60_000;
+      application.offerOtpExpiresAt.getTime() - OFFER_OTP_TTL_MINUTES * 60_000;
     if (Date.now() - requestedAt < 60_000) {
       return {
         ok: false,
@@ -206,10 +206,10 @@ export async function requestOfferOtp(input: {
   }
 
   const otp = generateOfferOtp();
-  await prisma.candidate.update({
-    where: { id: candidate.id },
+  await prisma.application.update({
+    where: { id: application.id },
     data: {
-      offerOtpHash: hashOfferOtp(candidate.id, otp),
+      offerOtpHash: hashOfferOtp(application.id, otp),
       offerOtpExpiresAt: new Date(Date.now() + OFFER_OTP_TTL_MINUTES * 60_000),
       offerOtpAttempts: 0,
     },
@@ -217,10 +217,17 @@ export async function requestOfferOtp(input: {
 
   // Like the login OTP, verification codes aren't recorded on the candidate's
   // email thread. In dev the transport logs instead of sending.
-  const { subject, html } = await offerOtpEmail(otp);
-  const result = await sendMail({ to: candidate.email!, subject, html });
+  const { subject, html, text } = await offerOtpEmail(otp);
+  const result = await sendOtpMail({
+    to: application.candidate.email!,
+    subject,
+    html,
+    text,
+  });
   if (result.provider === "console") {
-    console.log(`\n[BoonHRM] (dev) offer OTP for ${candidate.fullName}: ${otp}\n`);
+    console.log(
+      `\n[BoonHRM] (dev) offer OTP for ${application.candidate.fullName}: ${otp}\n`,
+    );
   }
 
   return { ok: true };
@@ -237,15 +244,15 @@ export async function unlockOffer(input: {
 
   const resolved = await resolveOffer(parsed.data.token, parsed.data.email);
   if (!resolved.ok) return resolved;
-  const { candidate, state } = resolved;
+  const { application, state } = resolved;
 
-  const otpError = await checkOtp(candidate, parsed.data.otp);
+  const otpError = await checkOtp(application, parsed.data.otp);
   if (otpError) return { ok: false, error: otpError };
 
   // Keep the code valid while the candidate reads the offer, so accept/decline
   // (which re-verifies it) doesn't fail mid-review.
-  await prisma.candidate.update({
-    where: { id: candidate.id },
+  await prisma.application.update({
+    where: { id: application.id },
     data: {
       offerOtpExpiresAt: new Date(
         Date.now() + OFFER_OTP_UNLOCKED_MINUTES * 60_000,
@@ -253,7 +260,7 @@ export async function unlockOffer(input: {
     },
   });
 
-  return { ok: true, offer: await toPayload(candidate, state) };
+  return { ok: true, offer: await toPayload(application, state) };
 }
 
 /** Accept or decline. Idempotent — an already-answered offer returns its state. */
@@ -268,14 +275,14 @@ export async function respondToOffer(input: {
 
   const resolved = await resolveOffer(parsed.data.token, parsed.data.email);
   if (!resolved.ok) return resolved;
-  const { candidate, state } = resolved;
+  const { application, state } = resolved;
 
-  const otpError = await checkOtp(candidate, parsed.data.otp);
+  const otpError = await checkOtp(application, parsed.data.otp);
   if (otpError) return { ok: false, error: otpError };
 
   // Already answered (e.g. double click / second tab) — just report it.
   if (state !== "pending") {
-    return { ok: true, offer: await toPayload(candidate, state) };
+    return { ok: true, offer: await toPayload(application, state) };
   }
 
   // The response consumes the code.
@@ -286,15 +293,15 @@ export async function respondToOffer(input: {
   };
 
   if (parsed.data.decision === "accept") {
-    await prisma.candidate.update({
-      where: { id: candidate.id },
+    await prisma.application.update({
+      where: { id: application.id },
       data: { offerAcceptedAt: new Date(), ...clearOtp }, // stage stays APPROVED
     });
   } else {
     const REASON = "Declined offer via offer page";
     await prisma.$transaction([
-      prisma.candidate.update({
-        where: { id: candidate.id },
+      prisma.application.update({
+        where: { id: application.id },
         data: {
           stage: "REJECTED",
           stageEnteredAt: new Date(),
@@ -306,9 +313,9 @@ export async function respondToOffer(input: {
           ...clearOtp,
         },
       }),
-      prisma.candidateStageHistory.create({
+      prisma.applicationStageHistory.create({
         data: {
-          candidateId: candidate.id,
+          applicationId: application.id,
           fromStage: "APPROVED",
           toStage: "REJECTED",
           movedById: null, // candidate action via offer page
@@ -323,9 +330,9 @@ export async function respondToOffer(input: {
   try {
     await notifyOfferResponse(
       {
-        fullName: candidate.fullName,
-        email: candidate.email ?? "",
-        jobOpening: { title: candidate.jobOpening.title },
+        fullName: application.candidate.fullName,
+        email: application.candidate.email ?? "",
+        jobOpening: { title: application.jobOpening.title },
       },
       parsed.data.decision === "accept" ? "accepted" : "declined",
     );
@@ -333,9 +340,9 @@ export async function respondToOffer(input: {
     console.error("Offer response HR notification failed:", error);
   }
 
-  revalidatePath(`/job-openings/${candidate.jobOpeningId}`);
-  revalidatePath(`/candidates/${candidate.id}`);
+  revalidatePath(`/job-openings/${application.jobOpeningId}`);
+  revalidatePath(`/candidates/${application.candidateId}`);
 
   const newState = parsed.data.decision === "accept" ? "accepted" : "declined";
-  return { ok: true, offer: await toPayload(candidate, newState) };
+  return { ok: true, offer: await toPayload(application, newState) };
 }

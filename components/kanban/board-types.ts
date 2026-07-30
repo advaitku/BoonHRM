@@ -1,7 +1,10 @@
 import type { RejectionType, Stage } from "@/lib/generated/prisma/enums";
 
 export interface BoardCandidate {
+  /** Application id — the draggable unit on the board. */
   id: string;
+  /** Person id — where profile links go. */
+  candidateId: string;
   fullName: string;
   email: string | null;
   phone: string | null;

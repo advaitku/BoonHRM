@@ -24,6 +24,14 @@ const jobOpeningSchema = z.object({
     z.string().trim().url("In-person interview URL must be a valid URL").optional(),
   ),
   autoNotify: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
+  closureDeadline: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid closure deadline").optional(),
+  ),
+  interviewDeadline: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid interview deadline").optional(),
+  ),
 });
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
@@ -38,7 +46,13 @@ function parseForm(formData: FormData) {
     onlineInterviewUrl: formData.get("onlineInterviewUrl"),
     inPersonInterviewUrl: formData.get("inPersonInterviewUrl"),
     autoNotify: formData.get("autoNotify"),
+    closureDeadline: formData.get("closureDeadline"),
+    interviewDeadline: formData.get("interviewDeadline"),
   });
+}
+
+function toDateOrNull(dateOnly: string | undefined): Date | null {
+  return dateOnly ? new Date(`${dateOnly}T00:00:00Z`) : null;
 }
 
 export async function createJobOpening(formData: FormData): Promise<ActionResult> {
@@ -55,6 +69,8 @@ export async function createJobOpening(formData: FormData): Promise<ActionResult
       location: parsed.data.location ?? null,
       onlineInterviewUrl: parsed.data.onlineInterviewUrl ?? null,
       inPersonInterviewUrl: parsed.data.inPersonInterviewUrl ?? null,
+      closureDeadline: toDateOrNull(parsed.data.closureDeadline),
+      interviewDeadline: toDateOrNull(parsed.data.interviewDeadline),
       createdById: session.user.id,
     },
   });
@@ -84,6 +100,8 @@ export async function updateJobOpening(
       location: parsed.data.location ?? null,
       onlineInterviewUrl: parsed.data.onlineInterviewUrl ?? null,
       inPersonInterviewUrl: parsed.data.inPersonInterviewUrl ?? null,
+      closureDeadline: toDateOrNull(parsed.data.closureDeadline),
+      interviewDeadline: toDateOrNull(parsed.data.interviewDeadline),
     },
   });
 
@@ -98,6 +116,21 @@ export async function setJobOpeningStatus(
 ): Promise<ActionResult> {
   await requireUser();
   await prisma.jobOpening.update({ where: { id }, data: { status } });
+  revalidatePath("/job-openings");
+  revalidatePath(`/job-openings/${id}`);
+  return { ok: true, id };
+}
+
+export async function setJobOpeningAssignee(
+  id: string,
+  userId: string | null,
+): Promise<ActionResult> {
+  await requireUser();
+  if (userId) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return { ok: false, error: "User not found" };
+  }
+  await prisma.jobOpening.update({ where: { id }, data: { assignedToId: userId } });
   revalidatePath("/job-openings");
   revalidatePath(`/job-openings/${id}`);
   return { ok: true, id };

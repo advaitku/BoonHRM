@@ -7,7 +7,9 @@ import {
   getMailSettings,
   getNotificationEmail,
   getOfferAgreement,
+  getOtpMailSettings,
   getSetting,
+  getSupportEmail,
 } from "@/lib/settings";
 import { resolveProvider } from "@/lib/email/transport";
 import { TEMPLATE_META, getTemplateForEditing } from "@/lib/email/templates";
@@ -42,9 +44,11 @@ export default async function SettingsPage() {
     companyName,
     autoRejectDays,
     notificationEmail,
+    supportEmail,
     offerAgreement,
     customAgreement,
     mailSettings,
+    otpMailSettings,
     users,
     invite,
     rejection,
@@ -53,9 +57,11 @@ export default async function SettingsPage() {
     getCompanyName(),
     getAutoRejectDays(),
     getNotificationEmail(),
+    getSupportEmail(),
     getOfferAgreement(),
     getSetting(SETTING_KEYS.offerAgreement),
     getMailSettings(),
+    getOtpMailSettings(),
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     getTemplateForEditing("INTERVIEW_INVITE"),
     getTemplateForEditing("REJECTION"),
@@ -78,6 +84,7 @@ export default async function SettingsPage() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
+          <TabsTrigger value="otp-email">Sign-in codes</TabsTrigger>
           <TabsTrigger value="templates">Email templates</TabsTrigger>
           <TabsTrigger value="offer">Offer page</TabsTrigger>
         </TabsList>
@@ -95,6 +102,7 @@ export default async function SettingsPage() {
                 companyName={companyName}
                 autoRejectDays={autoRejectDays}
                 notificationEmail={notificationEmail}
+                supportEmail={supportEmail}
               />
             </CardContent>
           </Card>
@@ -155,14 +163,17 @@ export default async function SettingsPage() {
         <TabsContent value="email" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Outbound email</CardTitle>
+              <CardTitle className="text-base">Outbound email — recruiting</CardTitle>
               <CardDescription>
-                How BoonHRM sends sign-in codes and candidate emails. Values
-                saved here override the server&apos;s environment variables.
+                How BoonHRM sends candidate-facing mail (interview invite,
+                rejection, approval). Independent from sign-in codes, below —
+                values saved here override the server&apos;s environment
+                variables for this channel only.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <EmailSettingsForm
+                channel="recruiting"
                 initial={{
                   provider: mailSettings.provider,
                   activeProvider: resolveProvider(mailSettings),
@@ -175,6 +186,40 @@ export default async function SettingsPage() {
                   msClientId: mailSettings.msClientId,
                   hasMsClientSecret: Boolean(mailSettings.msClientSecret),
                   careersMailbox: mailSettings.careersMailbox,
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="otp-email" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Outbound email — sign-in codes</CardTitle>
+              <CardDescription>
+                How BoonHRM sends the login OTP and the offer-page
+                verification code. Kept independent from recruiting mail
+                above, so changing where candidate emails go (e.g. switching
+                to Amazon SES) can never accidentally break sign-in. Unset
+                fields here fall back to the same environment variables as
+                recruiting mail until configured separately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EmailSettingsForm
+                channel="otp"
+                initial={{
+                  provider: otpMailSettings.provider,
+                  activeProvider: resolveProvider(otpMailSettings),
+                  smtpHost: otpMailSettings.smtpHost,
+                  smtpPort: otpMailSettings.smtpPort,
+                  smtpUser: otpMailSettings.smtpUser,
+                  hasSmtpPass: Boolean(otpMailSettings.smtpPass),
+                  mailFrom: otpMailSettings.mailFrom,
+                  msTenantId: otpMailSettings.msTenantId,
+                  msClientId: otpMailSettings.msClientId,
+                  hasMsClientSecret: Boolean(otpMailSettings.msClientSecret),
+                  careersMailbox: otpMailSettings.careersMailbox,
                 }}
               />
             </CardContent>

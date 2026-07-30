@@ -5,6 +5,7 @@ export const SETTING_KEYS = {
   companyName: "companyName",
   autoRejectDays: "autoRejectDays",
   notificationEmail: "notificationEmail",
+  supportEmail: "supportEmail",
   offerAgreement: "offerAgreement",
   // Outbound email (Settings → Email); env vars are the fallback.
   mailProvider: "mailProvider",
@@ -58,6 +59,15 @@ export async function getNotificationEmail(): Promise<string> {
   );
 }
 
+/** Shown to candidates in the auto-generated-email footer of every outbound mail. */
+export async function getSupportEmail(): Promise<string> {
+  return (
+    (await getSetting(SETTING_KEYS.supportEmail)) ||
+    process.env.SUPPORT_EMAIL ||
+    ""
+  );
+}
+
 // Shown on the public offer page below the offer details. Admin-editable
 // (Settings → Offer page); this is the fallback until it's customized.
 export const DEFAULT_OFFER_AGREEMENT = `Terms of Offer
@@ -98,21 +108,44 @@ export interface MailSettings {
   careersMailbox: string;
 }
 
-export async function getMailSettings(): Promise<MailSettings> {
+// Sign-in / security codes (login OTP, offer-page verification code) use a
+// settings bundle that's completely independent from the one above, which
+// covers candidate-facing recruiting mail (interview/rejection/approval).
+// Kept separate so changing where recruiting mail goes (e.g. switching to
+// Amazon SES) can never accidentally also change — or break — login email.
+// Both fall back to the SAME env vars when their own DB rows are unset, so
+// an existing single-provider deployment keeps working unchanged until the
+// two are explicitly configured differently in Settings → Email.
+export const OTP_SETTING_KEYS = {
+  mailProvider: "otpMailProvider",
+  smtpHost: "otpSmtpHost",
+  smtpPort: "otpSmtpPort",
+  smtpUser: "otpSmtpUser",
+  smtpPass: "otpSmtpPass",
+  mailFrom: "otpMailFrom",
+  msTenantId: "otpMsTenantId",
+  msClientId: "otpMsClientId",
+  msClientSecret: "otpMsClientSecret",
+  careersMailbox: "otpCareersMailbox",
+} as const;
+
+type MailSettingKeys = typeof SETTING_KEYS | typeof OTP_SETTING_KEYS;
+
+async function loadMailSettings(keys: MailSettingKeys): Promise<MailSettings> {
   const rows = await prisma.appSetting.findMany({
     where: {
       key: {
         in: [
-          SETTING_KEYS.mailProvider,
-          SETTING_KEYS.smtpHost,
-          SETTING_KEYS.smtpPort,
-          SETTING_KEYS.smtpUser,
-          SETTING_KEYS.smtpPass,
-          SETTING_KEYS.mailFrom,
-          SETTING_KEYS.msTenantId,
-          SETTING_KEYS.msClientId,
-          SETTING_KEYS.msClientSecret,
-          SETTING_KEYS.careersMailbox,
+          keys.mailProvider,
+          keys.smtpHost,
+          keys.smtpPort,
+          keys.smtpUser,
+          keys.smtpPass,
+          keys.mailFrom,
+          keys.msTenantId,
+          keys.msClientId,
+          keys.msClientSecret,
+          keys.careersMailbox,
         ],
       },
     },
@@ -121,7 +154,7 @@ export async function getMailSettings(): Promise<MailSettings> {
   const pick = (key: string, env: string | undefined) => db[key] || env || "";
 
   const providerRaw = (
-    db[SETTING_KEYS.mailProvider] ||
+    db[keys.mailProvider] ||
     process.env.MAIL_PROVIDER ||
     "auto"
   ).toLowerCase();
@@ -131,19 +164,29 @@ export async function getMailSettings(): Promise<MailSettings> {
       : "auto"
   ) as MailSettings["provider"];
 
-  const portRaw = pick(SETTING_KEYS.smtpPort, process.env.SMTP_PORT);
+  const portRaw = pick(keys.smtpPort, process.env.SMTP_PORT);
   const smtpPort = Number(portRaw) || 465;
 
   return {
     provider,
-    smtpHost: pick(SETTING_KEYS.smtpHost, process.env.SMTP_HOST),
+    smtpHost: pick(keys.smtpHost, process.env.SMTP_HOST),
     smtpPort,
-    smtpUser: pick(SETTING_KEYS.smtpUser, process.env.SMTP_USER),
-    smtpPass: pick(SETTING_KEYS.smtpPass, process.env.SMTP_PASS),
-    mailFrom: pick(SETTING_KEYS.mailFrom, process.env.MAIL_FROM),
-    msTenantId: pick(SETTING_KEYS.msTenantId, process.env.MS_TENANT_ID),
-    msClientId: pick(SETTING_KEYS.msClientId, process.env.MS_CLIENT_ID),
-    msClientSecret: pick(SETTING_KEYS.msClientSecret, process.env.MS_CLIENT_SECRET),
-    careersMailbox: pick(SETTING_KEYS.careersMailbox, process.env.CAREERS_MAILBOX),
+    smtpUser: pick(keys.smtpUser, process.env.SMTP_USER),
+    smtpPass: pick(keys.smtpPass, process.env.SMTP_PASS),
+    mailFrom: pick(keys.mailFrom, process.env.MAIL_FROM),
+    msTenantId: pick(keys.msTenantId, process.env.MS_TENANT_ID),
+    msClientId: pick(keys.msClientId, process.env.MS_CLIENT_ID),
+    msClientSecret: pick(keys.msClientSecret, process.env.MS_CLIENT_SECRET),
+    careersMailbox: pick(keys.careersMailbox, process.env.CAREERS_MAILBOX),
   };
+}
+
+/** Candidate-facing recruiting mail: interview invite, rejection, approval. */
+export async function getMailSettings(): Promise<MailSettings> {
+  return loadMailSettings(SETTING_KEYS);
+}
+
+/** Sign-in / security codes: login OTP, offer-page verification code. */
+export async function getOtpMailSettings(): Promise<MailSettings> {
+  return loadMailSettings(OTP_SETTING_KEYS);
 }

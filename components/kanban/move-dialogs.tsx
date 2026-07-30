@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Building2, Check, MailX, Video } from "lucide-react";
-import type { BoardCandidate, BoardOpening } from "@/components/kanban/board-types";
+import type { BoardOpening } from "@/components/kanban/board-types";
 import type { MoveInput } from "@/lib/actions/stage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,8 +37,15 @@ type Extras = Partial<
   >
 >;
 
+/** Minimal shape the gate dialogs need — satisfied by BoardCandidate and by
+ * the candidate-page applications panel. */
+export interface MoveSubject {
+  fullName: string;
+  email: string | null;
+}
+
 interface GateDialogProps {
-  candidate: BoardCandidate | null;
+  candidate: MoveSubject | null;
   opening: BoardOpening;
   onConfirm: (extras: Extras) => void;
   onCancel: () => void;

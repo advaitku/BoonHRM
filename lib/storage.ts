@@ -17,7 +17,7 @@ export const RESUME_MIME_EXT: Record<string, string> = {
     "docx",
 };
 
-export const MAX_RESUME_BYTES = 10 * 1024 * 1024; // 10 MB
+export const MAX_RESUME_BYTES = 3 * 1024 * 1024; // 3 MB
 
 /** Persist a resume buffer; returns the path RELATIVE to the storage root. */
 export async function saveResume(

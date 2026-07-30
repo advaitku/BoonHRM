@@ -3,6 +3,10 @@ import { requireUser } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import { JobOpeningForm } from "@/components/job-openings/job-opening-form";
 
+function toDateInputValue(date: Date | null): string {
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
 export default async function EditJobOpeningPage({
   params,
 }: {
@@ -30,6 +34,8 @@ export default async function EditJobOpeningPage({
           onlineInterviewUrl: opening.onlineInterviewUrl ?? "",
           inPersonInterviewUrl: opening.inPersonInterviewUrl ?? "",
           autoNotify: opening.autoNotify,
+          closureDeadline: toDateInputValue(opening.closureDeadline),
+          interviewDeadline: toDateInputValue(opening.interviewDeadline),
         }}
       />
     </div>

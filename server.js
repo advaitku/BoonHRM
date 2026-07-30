@@ -15,7 +15,6 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   createServer((req, res) => handle(req, res)).listen(port, hostname, () => {
-    // eslint-disable-next-line no-console
     console.log(`BoonHRM ready on http://${hostname}:${port}`);
   });
 });

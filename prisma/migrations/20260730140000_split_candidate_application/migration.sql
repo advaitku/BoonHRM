@@ -62,15 +62,17 @@ ALTER TABLE `Application` ADD CONSTRAINT `Application_jobOpeningId_fkey`
 ALTER TABLE `CandidateStageHistory` DROP FOREIGN KEY `CandidateStageHistory_candidateId_fkey`;
 ALTER TABLE `CandidateStageHistory` RENAME TO `ApplicationStageHistory`;
 ALTER TABLE `ApplicationStageHistory` CHANGE COLUMN `candidateId` `applicationId` VARCHAR(191) NOT NULL;
-ALTER TABLE `ApplicationStageHistory`
-    RENAME INDEX `CandidateStageHistory_candidateId_createdAt_idx` TO `ApplicationStageHistory_applicationId_createdAt_idx`;
+-- DROP + CREATE rather than RENAME INDEX (RENAME INDEX needs MariaDB 10.5.2+).
+ALTER TABLE `ApplicationStageHistory` DROP INDEX `CandidateStageHistory_candidateId_createdAt_idx`;
+CREATE INDEX `ApplicationStageHistory_applicationId_createdAt_idx` ON `ApplicationStageHistory`(`applicationId`, `createdAt`);
 ALTER TABLE `ApplicationStageHistory` ADD CONSTRAINT `ApplicationStageHistory_applicationId_fkey`
     FOREIGN KEY (`applicationId`) REFERENCES `Application`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- 4. Repoint email thread -> Application
 ALTER TABLE `EmailThread` DROP FOREIGN KEY `EmailThread_candidateId_fkey`;
 ALTER TABLE `EmailThread` CHANGE COLUMN `candidateId` `applicationId` VARCHAR(191) NOT NULL;
-ALTER TABLE `EmailThread` RENAME INDEX `EmailThread_candidateId_key` TO `EmailThread_applicationId_key`;
+ALTER TABLE `EmailThread` DROP INDEX `EmailThread_candidateId_key`;
+CREATE UNIQUE INDEX `EmailThread_applicationId_key` ON `EmailThread`(`applicationId`);
 ALTER TABLE `EmailThread` ADD CONSTRAINT `EmailThread_applicationId_fkey`
     FOREIGN KEY (`applicationId`) REFERENCES `Application`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 

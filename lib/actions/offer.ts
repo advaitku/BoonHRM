@@ -293,10 +293,31 @@ export async function respondToOffer(input: {
   };
 
   if (parsed.data.decision === "accept") {
-    await prisma.application.update({
-      where: { id: application.id },
-      data: { offerAcceptedAt: new Date(), ...clearOtp }, // stage stays APPROVED
-    });
+    // Snapshot exactly what the candidate agreed to — the agreement text is
+    // admin-editable, so the accepted version must be recorded verbatim.
+    const [agreementText, companyName] = await Promise.all([
+      getOfferAgreement(),
+      getCompanyName(),
+    ]);
+    await prisma.$transaction([
+      prisma.application.update({
+        where: { id: application.id },
+        data: { offerAcceptedAt: new Date(), ...clearOtp }, // stage stays APPROVED
+      }),
+      prisma.offerAcceptance.create({
+        data: {
+          applicationId: application.id,
+          jobTitle: application.jobOpening.title,
+          companyName,
+          candidateName: application.candidate.fullName,
+          candidateEmail: parsed.data.email.trim().toLowerCase(),
+          location: application.jobOpening.location,
+          ctcDetails: application.ctcDetails,
+          dateOfJoining: application.dateOfJoining,
+          agreementText,
+        },
+      }),
+    ]);
   } else {
     const REASON = "Declined offer via offer page";
     await prisma.$transaction([

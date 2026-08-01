@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { getCompanyName, getSupportEmail } from "@/lib/settings";
 import { BOON_CONTACT } from "@/lib/brand";
 import { formatJobRef, jobUrl, parseJobRef } from "@/lib/job-ref";
-import { richTextToPlainText } from "@/lib/rich-text";
+import { richTextToPlainText, sanitizeRichText } from "@/lib/rich-text";
 import { JobPosting } from "@/components/jobs/job-posting";
 
 export const dynamic = "force-dynamic";
@@ -104,7 +104,12 @@ export default async function PublicJobPage({
       posting={{
         refNumber: posting.refNumber,
         title: posting.title,
-        description: posting.description,
+        // Sanitized here (not just inside JobDescription) so the raw DB value
+        // never enters the component tree — otherwise it would appear, inert
+        // but visible, in the serialized RSC payload of the public page.
+        description: posting.description
+          ? sanitizeRichText(posting.description)
+          : null,
         location: posting.location,
         positions: posting.positions,
         status: posting.status,

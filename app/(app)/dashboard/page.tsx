@@ -21,6 +21,11 @@ import {
   PipelineChart,
   type PipelinePoint,
 } from "@/components/dashboard/pipeline-chart";
+import {
+  DateCalendarWidget,
+  type CalendarWidgetEvent,
+} from "@/components/dashboard/date-calendar-widget";
+import { formatJobRef } from "@/lib/job-ref";
 import { cn } from "@/lib/utils";
 
 export default async function DashboardPage({
@@ -38,6 +43,14 @@ export default async function DashboardPage({
   );
   const chartStart = startOfWeek(new Date(Date.now() - 11 * 7 * 86_400_000));
 
+  // Calendar-widget window: start of the current month (UTC, matching how the
+  // date fields are stored) through ~5 months out, so the current month's
+  // calendar still shows dots for days that have already passed.
+  const now = new Date();
+  const monthStartISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const windowStart = new Date(`${monthStartISO}T00:00:00Z`);
+  const windowEnd = new Date(windowStart.getTime() + 150 * 86_400_000);
+
   const [
     openOpenings,
     activePipeline,
@@ -46,6 +59,8 @@ export default async function DashboardPage({
     nearingAutoReject,
     recentCandidates,
     recentRejections,
+    upcomingJoinings,
+    deadlineOpenings,
   ] = await Promise.all([
     prisma.jobOpening.count({ where: { status: "OPEN" } }),
     prisma.application.count({
@@ -67,6 +82,35 @@ export default async function DashboardPage({
       where: { rejectedAt: { gte: chartStart } },
       select: { rejectedAt: true },
     }),
+    prisma.application.findMany({
+      where: {
+        stage: "APPROVED",
+        dateOfJoining: { gte: windowStart, lt: windowEnd },
+      },
+      select: {
+        id: true,
+        dateOfJoining: true,
+        candidate: { select: { id: true, fullName: true } },
+        jobOpening: { select: { title: true, refNumber: true } },
+      },
+      orderBy: { dateOfJoining: "asc" },
+    }),
+    prisma.jobOpening.findMany({
+      where: {
+        status: "OPEN",
+        OR: [
+          { closureDeadline: { gte: windowStart, lt: windowEnd } },
+          { interviewDeadline: { gte: windowStart, lt: windowEnd } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        refNumber: true,
+        closureDeadline: true,
+        interviewDeadline: true,
+      },
+    }),
   ]);
 
   const chartData = buildWeeklySeries(
@@ -76,6 +120,39 @@ export default async function DashboardPage({
       .map((c) => c.rejectedAt)
       .filter((d): d is Date => Boolean(d)),
   );
+
+  const joiningEvents: CalendarWidgetEvent[] = upcomingJoinings.map((a) => ({
+    id: a.id,
+    date: a.dateOfJoining!.toISOString().slice(0, 10),
+    title: a.candidate.fullName,
+    subtitle: `${a.jobOpening.title} · ${formatJobRef(a.jobOpening.refNumber)}`,
+    href: `/candidates/${a.candidate.id}`,
+  }));
+
+  // The OR above matches an opening if *either* deadline is in the window, so
+  // each deadline is re-checked before it becomes an event.
+  const deadlineEvents: CalendarWidgetEvent[] = deadlineOpenings
+    .flatMap((o) =>
+      (
+        [
+          { badge: "Closure", date: o.closureDeadline },
+          { badge: "Interview", date: o.interviewDeadline },
+        ] as const
+      )
+        .filter(
+          (d): d is { badge: "Closure" | "Interview"; date: Date } =>
+            Boolean(d.date) && d.date! >= windowStart && d.date! < windowEnd,
+        )
+        .map((d) => ({
+          id: `${o.id}-${d.badge.toLowerCase()}`,
+          date: d.date.toISOString().slice(0, 10),
+          title: o.title,
+          subtitle: formatJobRef(o.refNumber),
+          badge: d.badge,
+          href: `/job-openings/${o.id}`,
+        })),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const results = query
     ? await prisma.candidate.findMany({
@@ -209,6 +286,21 @@ export default async function DashboardPage({
           )}
 
           <PipelineChart data={chartData} />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DateCalendarWidget
+              title="Upcoming joinings"
+              description="Approved candidates and their dates of joining"
+              events={joiningEvents}
+              emptyMessage="No upcoming joinings."
+            />
+            <DateCalendarWidget
+              title="Deadlines"
+              description="Closure and interview deadlines for open positions"
+              events={deadlineEvents}
+              emptyMessage="No upcoming deadlines."
+            />
+          </div>
 
           {/* Open openings overview */}
           <div className="space-y-3">

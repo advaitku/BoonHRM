@@ -49,6 +49,7 @@ export default async function CandidatePage({
           emailThread: {
             include: { messages: { orderBy: { occurredAt: "desc" } } },
           },
+          offerAcceptances: { orderBy: { acceptedAt: "desc" }, take: 1 },
         },
       },
       comments: { orderBy: { createdAt: "desc" } },
@@ -102,6 +103,9 @@ export default async function CandidatePage({
 
   const applicationRows: ApplicationRow[] = candidate.applications.map((a) => {
     const offerState = a.stage === "APPROVED" ? getOfferState(a) : null;
+    // Latest acceptance snapshot — kept visible regardless of current stage,
+    // since it's the audit record of what the candidate agreed to.
+    const acceptance = a.offerAcceptances[0] ?? null;
     return {
       id: a.id,
       stage: a.stage,
@@ -111,6 +115,20 @@ export default async function CandidatePage({
       offerState,
       offerUrl:
         offerState === "pending" && a.offerToken ? offerUrl(a.offerToken) : null,
+      acceptedOffer: acceptance
+        ? {
+            acceptedAt: acceptance.acceptedAt.toISOString(),
+            jobTitle: acceptance.jobTitle,
+            companyName: acceptance.companyName,
+            candidateEmail: acceptance.candidateEmail,
+            location: acceptance.location,
+            ctcDetails: acceptance.ctcDetails,
+            dateOfJoining: acceptance.dateOfJoining
+              ? acceptance.dateOfJoining.toISOString().slice(0, 10)
+              : null,
+            agreementText: acceptance.agreementText,
+          }
+        : null,
       opening: {
         id: a.jobOpening.id,
         title: a.jobOpening.title,

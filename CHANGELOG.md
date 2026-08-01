@@ -7,6 +7,28 @@ identified at a glance.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-01
+
+### Added
+- Every job opening now has a human-readable reference code (`BOON-001`,
+  `BOON-002`, …) — sequential, stable, shown on the list (card + table views),
+  the opening page, and the edit page. Existing openings were backfilled in
+  creation order.
+- Job descriptions are now rich text: a WYSIWYG editor (bold/italic, headings,
+  lists, quotes, links) replaces the plain textarea, and the description is now
+  actually displayed on the opening's page (previously it was stored but shown
+  nowhere). Existing plain-text descriptions were converted automatically.
+- Public job pages: flipping the new **Publish** switch on an opening makes it
+  viewable by anyone at `/jobs/BOON-001` — a branded, shareable page with the
+  role details, description, posting date and an email apply button (pre-tagged
+  with the reference code). Off by default, so confidential roles stay private;
+  unpublished roles are indistinguishable from nonexistent ones (no info leak).
+  Closed-but-published roles show "no longer accepting applications" instead of
+  breaking the link. A `/jobs` careers index is planned for a later version.
+- All rendered description HTML is sanitized against a strict allowlist on both
+  save and render (new `sanitize-html` dependency) — scripts, event handlers,
+  `javascript:` URLs, images and iframes are stripped.
+
 ## [0.4.0] - 2026-07-30
 
 ### Added

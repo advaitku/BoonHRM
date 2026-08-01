@@ -217,12 +217,36 @@ model Application {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  stageHistory ApplicationStageHistory[]
-  emailThread  EmailThread?
+  stageHistory     ApplicationStageHistory[]
+  emailThread      EmailThread?
+  offerAcceptances OfferAcceptance[]
 
   @@unique([candidateId, jobOpeningId])
   @@index([jobOpeningId, stage])
   @@index([createdAt]) // for the 75-day sweep
+}
+
+// Append-only record of each offer acceptance: a snapshot of exactly what the
+// candidate saw and agreed to on the offer page. Survives re-approvals (which
+// reset the offer columns on Application), so the agreed terms are never lost
+// even if the admin later edits the agreement text in Settings.
+model OfferAcceptance {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  jobTitle       String
+  companyName    String
+  candidateName  String
+  candidateEmail String // the email that passed the offer-page OTP gate
+  location       String?
+  ctcDetails     String?   @db.Text
+  dateOfJoining  DateTime? @db.Date
+  agreementText  String    @db.Text // the T&C version the candidate accepted
+
+  acceptedAt DateTime @default(now())
+
+  @@index([applicationId])
 }
 
 model Resume {

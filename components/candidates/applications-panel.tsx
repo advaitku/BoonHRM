@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Trash2 } from "lucide-react";
+import { Clock, FileCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { RejectionType, Stage } from "@/lib/generated/prisma/enums";
 import { deleteApplication } from "@/lib/actions/applications";
@@ -39,7 +39,37 @@ export interface ApplicationRow {
   rejectionReason: string | null;
   offerState: "pending" | "accepted" | "declined" | "expired" | null;
   offerUrl: string | null;
+  /** Snapshot of the latest accepted offer (null for pre-snapshot acceptances). */
+  acceptedOffer: AcceptedOffer | null;
   opening: BoardOpening & { title: string };
+}
+
+export interface AcceptedOffer {
+  acceptedAt: string; // ISO
+  jobTitle: string;
+  companyName: string;
+  candidateEmail: string;
+  location: string | null;
+  ctcDetails: string | null;
+  dateOfJoining: string | null; // ISO date (YYYY-MM-DD)
+  agreementText: string;
+}
+
+const acceptedAtFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+function formatJoiningDate(iso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${iso}T00:00:00Z`));
 }
 
 /** Primary card on the candidate page: every opening this person applied to,
@@ -54,6 +84,7 @@ export function ApplicationsPanel({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [confirmRemove, setConfirmRemove] = useState<ApplicationRow | null>(null);
+  const [viewAcceptance, setViewAcceptance] = useState<ApplicationRow | null>(null);
 
   function remove(application: ApplicationRow) {
     startTransition(async () => {
@@ -119,19 +150,44 @@ export function ApplicationsPanel({
                         </span>
                       )}
                     </p>
-                    {application.stage === "APPROVED" && application.offerState && (
+                    {((application.stage === "APPROVED" && application.offerState) ||
+                      application.acceptedOffer) && (
                       <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                        {application.offerState === "accepted" && (
-                          <Badge>Offer accepted</Badge>
+                        {application.stage === "APPROVED" && (
+                          <>
+                            {application.offerState === "accepted" && (
+                              <Badge>Offer accepted</Badge>
+                            )}
+                            {application.offerState === "declined" && (
+                              <Badge variant="destructive">Offer declined</Badge>
+                            )}
+                            {application.offerState === "pending" && (
+                              <Badge variant="outline">Awaiting offer response</Badge>
+                            )}
+                            {application.offerState === "expired" && (
+                              <Badge variant="secondary">Offer link expired</Badge>
+                            )}
+                          </>
                         )}
-                        {application.offerState === "declined" && (
-                          <Badge variant="destructive">Offer declined</Badge>
-                        )}
-                        {application.offerState === "pending" && (
-                          <Badge variant="outline">Awaiting offer response</Badge>
-                        )}
-                        {application.offerState === "expired" && (
-                          <Badge variant="secondary">Offer link expired</Badge>
+                        {application.acceptedOffer && (
+                          <>
+                            <span className="text-xs text-muted-foreground">
+                              Accepted{" "}
+                              {acceptedAtFmt.format(
+                                new Date(application.acceptedOffer.acceptedAt),
+                              )}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 gap-1 px-2 text-xs"
+                              onClick={() => setViewAcceptance(application)}
+                            >
+                              <FileCheck className="size-3" />
+                              View accepted offer
+                            </Button>
+                          </>
                         )}
                         {application.offerState === "pending" && application.offerUrl && (
                           <CopyLink url={application.offerUrl} />
@@ -190,6 +246,71 @@ export function ApplicationsPanel({
               Remove application
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(viewAcceptance)}
+        onOpenChange={(v) => !v && setViewAcceptance(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          {viewAcceptance?.acceptedOffer && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Accepted offer</DialogTitle>
+                <DialogDescription>
+                  {viewAcceptance.acceptedOffer.jobTitle} at{" "}
+                  {viewAcceptance.acceptedOffer.companyName} — accepted{" "}
+                  {acceptedAtFmt.format(
+                    new Date(viewAcceptance.acceptedOffer.acceptedAt),
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                  <dt className="text-muted-foreground">Verified email</dt>
+                  <dd className="break-all">
+                    {viewAcceptance.acceptedOffer.candidateEmail}
+                  </dd>
+                  {viewAcceptance.acceptedOffer.location && (
+                    <>
+                      <dt className="text-muted-foreground">Location</dt>
+                      <dd>{viewAcceptance.acceptedOffer.location}</dd>
+                    </>
+                  )}
+                  {viewAcceptance.acceptedOffer.dateOfJoining && (
+                    <>
+                      <dt className="text-muted-foreground">Date of joining</dt>
+                      <dd>
+                        {formatJoiningDate(
+                          viewAcceptance.acceptedOffer.dateOfJoining,
+                        )}
+                      </dd>
+                    </>
+                  )}
+                </dl>
+                {viewAcceptance.acceptedOffer.ctcDetails && (
+                  <div className="space-y-1.5">
+                    <h4 className="font-medium">Compensation</h4>
+                    <div className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3">
+                      {viewAcceptance.acceptedOffer.ctcDetails}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <h4 className="font-medium">Terms &amp; agreement accepted</h4>
+                  <div className="max-h-[40vh] overflow-y-auto whitespace-pre-wrap rounded-lg border p-3 text-muted-foreground">
+                    {viewAcceptance.acceptedOffer.agreementText}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setViewAcceptance(null)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </Card>

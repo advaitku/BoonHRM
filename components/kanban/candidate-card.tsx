@@ -1,27 +1,36 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Clock, FileText, Mail, MessageSquare, Phone } from "lucide-react";
+import { Clock, MessageSquare } from "lucide-react";
 import type { BoardCandidate } from "@/components/kanban/board-types";
 import { daysSince } from "@/components/kanban/board-types";
-import { getInitials } from "@/lib/initials";
 import { tagChipClass } from "@/lib/tag-colors";
 import { cn } from "@/lib/utils";
+
+/** Matches the board's PointerSensor activation distance — past this the
+ *  gesture was a drag, so the trailing click must not open the dialog. */
+const DRAG_SLOP = 6;
 
 export function CandidateCard({
   candidate,
   overlay = false,
+  onOpen,
 }: {
   candidate: BoardCandidate;
   overlay?: boolean;
+  onOpen?: (candidate: BoardCandidate) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: candidate.id, disabled: overlay });
 
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+
   const days = daysSince(candidate.stageEnteredAt);
-  const initials = getInitials(candidate.fullName);
+  const shownTags = candidate.tags.slice(0, 2);
+  const extraTags = candidate.tags.length - shownTags.length;
 
   return (
     <div
@@ -30,77 +39,72 @@ export function CandidateCard({
       style={
         overlay ? undefined : { transform: CSS.Translate.toString(transform) }
       }
+      onPointerDown={(e) => {
+        pointerStart.current = { x: e.clientX, y: e.clientY };
+        // This prop is declared after {...listeners}, so it overrides dnd-kit's
+        // own onPointerDown — forward to it or dragging never starts.
+        if (!overlay) listeners?.onPointerDown?.(e);
+      }}
+      onClick={(e) => {
+        if (overlay || !onOpen) return;
+        const start = pointerStart.current;
+        pointerStart.current = null;
+        // A drop fires a click too — only treat it as a click if we barely moved.
+        if (
+          start &&
+          Math.hypot(e.clientX - start.x, e.clientY - start.y) > DRAG_SLOP
+        ) {
+          return;
+        }
+        onOpen(candidate);
+      }}
       className={cn(
-        "group cursor-grab select-none rounded-lg border bg-background p-3 shadow-xs transition-shadow",
+        "group cursor-grab select-none rounded-lg border bg-background px-2.5 py-1.5 shadow-xs transition-shadow",
         overlay
           ? "rotate-2 cursor-grabbing shadow-lg ring-2 ring-primary/30"
           : "hover:shadow-md active:cursor-grabbing",
         isDragging && "opacity-40",
       )}
     >
-      <div className="flex items-start gap-2.5">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-          {initials || "?"}
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-1.5">
-            <Link
-              href={`/candidates/${candidate.candidateId}`}
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="truncate text-sm font-medium hover:underline"
-            >
-              {candidate.fullName}
-            </Link>
-            {candidate.hasResume && (
-              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+      <Link
+        href={`/candidates/${candidate.candidateId}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="block truncate text-sm font-medium hover:underline"
+      >
+        {candidate.fullName}
+      </Link>
+
+      <div className="mt-0.5 flex items-center gap-1 overflow-hidden text-[11px] text-muted-foreground">
+        {shownTags.map((tag) => (
+          <span
+            key={tag.id}
+            className={cn(
+              "shrink-0 border px-1 py-px font-medium leading-4",
+              tagChipClass(tag.color),
             )}
-          </div>
-          {candidate.email && (
-            <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-              <Mail className="size-3 shrink-0" />
-              {candidate.email}
-            </p>
-          )}
-          {!candidate.email && candidate.phone && (
-            <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-              <Phone className="size-3 shrink-0" />
-              {candidate.phone}
-            </p>
-          )}
-          {candidate.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
-              {candidate.tags.slice(0, 3).map((tag) => (
-                <span
-                  key={tag.id}
-                  className={cn(
-                    "inline-flex border px-1.5 py-px text-[10px] font-medium leading-4",
-                    tagChipClass(tag.color),
-                  )}
-                >
-                  {tag.name}
-                </span>
-              ))}
-              {candidate.tags.length > 3 && (
-                <span className="inline-flex border bg-muted px-1.5 py-px text-[10px] font-medium leading-4 text-muted-foreground">
-                  +{candidate.tags.length - 3}
-                </span>
-              )}
-            </div>
-          )}
-          <p className="flex items-center gap-2 text-xs text-muted-foreground/80">
-            <span className="inline-flex items-center gap-1">
-              <Clock className="size-3 shrink-0" />
-              {days === 0 ? "Today" : `${days}d in stage`}
+          >
+            {tag.name}
+          </span>
+        ))}
+        {extraTags > 0 && (
+          <span className="shrink-0 border bg-muted px-1 py-px font-medium leading-4">
+            +{extraTags}
+          </span>
+        )}
+
+        <span className="ml-auto inline-flex shrink-0 items-center gap-2">
+          {candidate.commentCount > 0 && (
+            <span className="inline-flex items-center gap-0.5">
+              <MessageSquare className="size-3" />
+              {candidate.commentCount}
             </span>
-            {candidate.commentCount > 0 && (
-              <span className="inline-flex items-center gap-1">
-                <MessageSquare className="size-3 shrink-0" />
-                {candidate.commentCount}
-              </span>
-            )}
-          </p>
-        </div>
+          )}
+          <span className="inline-flex items-center gap-0.5">
+            <Clock className="size-3" />
+            {days === 0 ? "Today" : `${days}d`}
+          </span>
+        </span>
       </div>
     </div>
   );

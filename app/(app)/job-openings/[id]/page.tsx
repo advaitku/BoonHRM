@@ -6,11 +6,15 @@ import {
   Bell,
   BellOff,
   CalendarClock,
+  ExternalLink,
+  EyeOff,
+  Globe,
   Link2,
   MapPin,
   Users,
 } from "lucide-react";
 import { requireUser } from "@/lib/auth-helpers";
+import { DEADLINE_URGENCY_CLASS, deadlineInfo } from "@/lib/deadline";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +22,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { OpeningActions } from "@/components/job-openings/opening-actions";
 import { AssigneePicker } from "@/components/job-openings/assignee-picker";
 import { AddCandidateDialog } from "@/components/candidates/add-candidate-dialog";
+import { CopyLink } from "@/components/candidates/copy-link";
+import { JobDescription } from "@/components/job-openings/job-description";
 import { OpeningCandidatesView } from "@/components/kanban/opening-candidates-view";
+import { formatJobRef, jobUrl } from "@/lib/job-ref";
 import { cn } from "@/lib/utils";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -27,9 +34,6 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-function isPast(date: Date): boolean {
-  return date.getTime() < Date.now();
-}
 
 export default async function JobOpeningPage({
   params,
@@ -58,6 +62,11 @@ export default async function JobOpeningPage({
   if (!opening) notFound();
 
   const closed = opening.status === "CLOSED";
+  // A closed opening's countdown is meaningless — show the date only.
+  const deadline =
+    opening.closureDeadline && !closed
+      ? deadlineInfo(opening.closureDeadline)
+      : null;
   const teamUsers = await prisma.user.findMany({
     where: { banned: false },
     orderBy: { name: "asc" },
@@ -83,6 +92,9 @@ export default async function JobOpeningPage({
             <h1 className="text-2xl font-semibold tracking-tight">
               {opening.title}
             </h1>
+            <span className="font-mono text-sm text-muted-foreground">
+              {formatJobRef(opening.refNumber)}
+            </span>
             <Badge variant={closed ? "secondary" : "default"}>
               {closed ? "Closed" : "Open"}
             </Badge>
@@ -102,13 +114,14 @@ export default async function JobOpeningPage({
               <span
                 className={cn(
                   "inline-flex items-center gap-1",
-                  isPast(opening.closureDeadline) && "font-medium text-destructive",
+                  deadline && DEADLINE_URGENCY_CLASS[deadline.urgency],
                 )}
               >
-                {isPast(opening.closureDeadline) && (
+                {deadline?.urgency === "passed" && (
                   <AlertTriangle className="size-3.5" />
                 )}
                 Closes {dateFmt.format(opening.closureDeadline)}
+                {deadline && <span>· {deadline.label}</span>}
               </span>
             )}
             {opening.interviewDeadline && (
@@ -143,6 +156,40 @@ export default async function JobOpeningPage({
               </span>
             )}
           </div>
+
+          {opening.publishedAt ? (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <Badge variant="outline" className="gap-1">
+                <Globe className="size-3" />
+                Published
+              </Badge>
+              <div className="w-full max-w-sm">
+                <CopyLink url={jobUrl(opening.refNumber)} />
+              </div>
+              <Button asChild variant="ghost" size="icon" className="size-7">
+                <a
+                  href={jobUrl(opening.refNumber)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open public page"
+                >
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            </div>
+          ) : (
+            <p className="inline-flex items-center gap-1.5 pt-1 text-sm text-muted-foreground">
+              <EyeOff className="size-3.5" />
+              Not published —{" "}
+              <Link
+                href={`/job-openings/${opening.id}/edit`}
+                className="underline underline-offset-2"
+              >
+                publish it
+              </Link>{" "}
+              to get a shareable link.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <AssigneePicker
@@ -154,6 +201,14 @@ export default async function JobOpeningPage({
           <OpeningActions openingId={opening.id} status={opening.status} />
         </div>
       </div>
+
+      {opening.description && (
+        <Card>
+          <CardContent className="pt-6">
+            <JobDescription html={opening.description} />
+          </CardContent>
+        </Card>
+      )}
 
       {opening.applications.length === 0 ? (
         <Card className="border-dashed">

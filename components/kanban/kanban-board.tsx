@@ -22,6 +22,7 @@ import type {
   BoardOpening,
 } from "@/components/kanban/board-types";
 import { CandidateCard } from "@/components/kanban/candidate-card";
+import { CandidateQuickView } from "@/components/kanban/candidate-quick-view";
 import { KanbanColumn } from "@/components/kanban/kanban-column";
 import { BucketColumn } from "@/components/kanban/bucket-column";
 import {
@@ -63,6 +64,7 @@ export function KanbanBoard({
   const [overlay, setOverlay] = useState<Record<string, Stage>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingMove | null>(null);
+  const [quickView, setQuickView] = useState<BoardCandidate | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -105,6 +107,19 @@ export function KanbanBoard({
     })();
   }
 
+  // Shared by drag-and-drop and the quick-view dialog: gated stages open their
+  // confirmation dialog first, everything else commits straight away.
+  function requestMove(candidate: BoardCandidate, toStage: Stage) {
+    const currentStage = overlay[candidate.id] ?? candidate.stage;
+    if (toStage === currentStage) return;
+
+    if (toStage === "INTERVIEW" || toStage === "REJECTED" || toStage === "APPROVED") {
+      setPending({ candidate: { ...candidate, stage: currentStage }, toStage });
+      return;
+    }
+    commit(candidate, toStage);
+  }
+
   function onDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
   }
@@ -116,16 +131,9 @@ export function KanbanBoard({
 
     const candidate = candidates.find((c) => c.id === String(active.id));
     if (!candidate) return;
-    const currentStage = overlay[candidate.id] ?? candidate.stage;
     const toStage = String(over.id) as Stage;
-    if (!STAGES.includes(toStage) || toStage === currentStage) return;
-
-    // Gated moves open a dialog first; the card stays put until confirmed.
-    if (toStage === "INTERVIEW" || toStage === "REJECTED" || toStage === "APPROVED") {
-      setPending({ candidate: { ...candidate, stage: currentStage }, toStage });
-      return;
-    }
-    commit(candidate, toStage);
+    if (!STAGES.includes(toStage)) return;
+    requestMove(candidate, toStage);
   }
 
   function confirmPending(extras: Extras) {
@@ -144,7 +152,12 @@ export function KanbanBoard({
       <div className="space-y-4">
         <div className="grid gap-4 md:grid-cols-3">
           {PIPELINE.map((stage) => (
-            <KanbanColumn key={stage} stage={stage} candidates={byStage[stage]} />
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              candidates={byStage[stage]}
+              onOpen={setQuickView}
+            />
           ))}
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -152,11 +165,13 @@ export function KanbanBoard({
             stage="APPROVED"
             candidates={byStage.APPROVED}
             hint="Drag a candidate here to approve them."
+            onOpen={setQuickView}
           />
           <BucketColumn
             stage="REJECTED"
             candidates={byStage.REJECTED}
             hint="Drag a candidate here to reject them — you'll be asked who ended the process."
+            onOpen={setQuickView}
           />
         </div>
       </div>
@@ -166,6 +181,16 @@ export function KanbanBoard({
           <CandidateCard candidate={activeCandidate} overlay />
         ) : null}
       </DragOverlay>
+
+      <CandidateQuickView
+        candidate={quickView}
+        onMove={(toStage) => {
+          if (!quickView) return;
+          setQuickView(null);
+          requestMove(quickView, toStage);
+        }}
+        onClose={() => setQuickView(null)}
+      />
 
       <InterviewUrlDialog
         candidate={pending?.toStage === "INTERVIEW" ? pending.candidate : null}

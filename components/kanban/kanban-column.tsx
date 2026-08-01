@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 export function KanbanColumn({
   stage,
   candidates,
+  onOpen,
 }: {
   stage: Stage;
   candidates: BoardCandidate[];
+  onOpen?: (candidate: BoardCandidate) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
@@ -20,7 +22,9 @@ export function KanbanColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[24rem] flex-col rounded-xl border border-t-4 bg-muted/30 transition-colors",
+        // Capped so a long column scrolls internally instead of stretching the
+        // page — the other columns' drop targets stay on screen while dragging.
+        "flex max-h-[65vh] min-h-[24rem] flex-col rounded-xl border border-t-4 bg-muted/30 transition-colors",
         STAGE_ACCENTS[stage].column,
         isOver && "bg-primary/5 ring-2 ring-primary/40",
       )}
@@ -36,7 +40,7 @@ export function KanbanColumn({
       </div>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2 pt-0">
         {candidates.map((c) => (
-          <CandidateCard key={c.id} candidate={c} />
+          <CandidateCard key={c.id} candidate={c} onOpen={onOpen} />
         ))}
         {candidates.length === 0 && (
           <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">

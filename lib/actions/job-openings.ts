@@ -5,13 +5,24 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-helpers";
+import { isRichTextEmpty, sanitizeRichText } from "@/lib/rich-text";
 
 const emptyToUndefined = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? undefined : v;
 
 const jobOpeningSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160),
-  description: z.preprocess(emptyToUndefined, z.string().trim().max(10_000).optional()),
+  // Rich-text HTML. `isRichTextEmpty` (not emptyToUndefined) because Tiptap emits
+  // "<p></p>" for an empty document, which would otherwise never clear the field.
+  // 50k leaves headroom under @db.Text's 65,535 bytes for multi-byte UTF-8.
+  description: z.preprocess(
+    (v) => (typeof v === "string" && isRichTextEmpty(v) ? undefined : v),
+    z
+      .string()
+      .max(50_000, "Description is too long")
+      .transform(sanitizeRichText)
+      .optional(),
+  ),
   location: z.preprocess(emptyToUndefined, z.string().trim().max(160).optional()),
   positions: z.coerce.number().int().min(1, "At least 1 position").max(999),
   status: z.enum(["OPEN", "CLOSED"]),
@@ -24,6 +35,8 @@ const jobOpeningSchema = z.object({
     z.string().trim().url("In-person interview URL must be a valid URL").optional(),
   ),
   autoNotify: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
+  // Not a column — mapped to the `publishedAt` timestamp below.
+  published: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
   closureDeadline: z.preprocess(
     emptyToUndefined,
     z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid closure deadline").optional(),
@@ -46,6 +59,7 @@ function parseForm(formData: FormData) {
     onlineInterviewUrl: formData.get("onlineInterviewUrl"),
     inPersonInterviewUrl: formData.get("inPersonInterviewUrl"),
     autoNotify: formData.get("autoNotify"),
+    published: formData.get("published"),
     closureDeadline: formData.get("closureDeadline"),
     interviewDeadline: formData.get("interviewDeadline"),
   });
@@ -62,15 +76,19 @@ export async function createJobOpening(formData: FormData): Promise<ActionResult
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
 
+  // `published` is a form field, not a column — it must not reach Prisma.
+  const { published, ...data } = parsed.data;
+
   const opening = await prisma.jobOpening.create({
     data: {
-      ...parsed.data,
-      description: parsed.data.description ?? null,
-      location: parsed.data.location ?? null,
-      onlineInterviewUrl: parsed.data.onlineInterviewUrl ?? null,
-      inPersonInterviewUrl: parsed.data.inPersonInterviewUrl ?? null,
-      closureDeadline: toDateOrNull(parsed.data.closureDeadline),
-      interviewDeadline: toDateOrNull(parsed.data.interviewDeadline),
+      ...data,
+      description: data.description ?? null,
+      location: data.location ?? null,
+      onlineInterviewUrl: data.onlineInterviewUrl ?? null,
+      inPersonInterviewUrl: data.inPersonInterviewUrl ?? null,
+      closureDeadline: toDateOrNull(data.closureDeadline),
+      interviewDeadline: toDateOrNull(data.interviewDeadline),
+      publishedAt: published ? new Date() : null,
       createdById: session.user.id,
     },
   });
@@ -92,16 +110,21 @@ export async function updateJobOpening(
   const existing = await prisma.jobOpening.findUnique({ where: { id } });
   if (!existing) return { ok: false, error: "Job opening not found" };
 
+  // `published` is a form field, not a column — it must not reach Prisma.
+  const { published, ...data } = parsed.data;
+
   await prisma.jobOpening.update({
     where: { id },
     data: {
-      ...parsed.data,
-      description: parsed.data.description ?? null,
-      location: parsed.data.location ?? null,
-      onlineInterviewUrl: parsed.data.onlineInterviewUrl ?? null,
-      inPersonInterviewUrl: parsed.data.inPersonInterviewUrl ?? null,
-      closureDeadline: toDateOrNull(parsed.data.closureDeadline),
-      interviewDeadline: toDateOrNull(parsed.data.interviewDeadline),
+      ...data,
+      description: data.description ?? null,
+      location: data.location ?? null,
+      onlineInterviewUrl: data.onlineInterviewUrl ?? null,
+      inPersonInterviewUrl: data.inPersonInterviewUrl ?? null,
+      closureDeadline: toDateOrNull(data.closureDeadline),
+      interviewDeadline: toDateOrNull(data.interviewDeadline),
+      // Re-publishing keeps the original posting date rather than resetting it.
+      publishedAt: published ? (existing.publishedAt ?? new Date()) : null,
     },
   });
 

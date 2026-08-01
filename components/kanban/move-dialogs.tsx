@@ -5,8 +5,8 @@ import { Building2, Check, MailX, Video } from "lucide-react";
 import type { BoardOpening } from "@/components/kanban/board-types";
 import type { MoveInput } from "@/lib/actions/stage";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -305,12 +305,12 @@ export function ApproveDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="doj">Date of joining</Label>
-            <Input
+            <DatePicker
               id="doj"
-              type="date"
               value={doj}
               min={today}
-              onChange={(e) => setDoj(e.target.value)}
+              onChange={setDoj}
+              placeholder="Pick a joining date"
             />
           </div>
           <p className="text-xs text-muted-foreground">

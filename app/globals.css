@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* `prose` classes for rendered rich-text job descriptions. Tailwind v4 has no
+   tailwind.config.*, so this is the only registration point. */
+@plugin "@tailwindcss/typography";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

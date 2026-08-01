@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Archive,
   ArrowUpDown,
   LayoutGrid,
   ListFilter,
@@ -15,8 +16,10 @@ import {
   X,
 } from "lucide-react";
 import { ALL_STAGES, STAGE_ACCENTS, STAGE_LABELS } from "@/lib/stages";
+import { DEADLINE_URGENCY_CLASS, deadlineInfo } from "@/lib/deadline";
 import type { Stage } from "@/lib/generated/prisma/enums";
 import { getInitials } from "@/lib/initials";
+import { formatJobRef } from "@/lib/job-ref";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +45,7 @@ import { cn } from "@/lib/utils";
 
 export interface JobOpeningListItem {
   id: string;
+  refNumber: number;
   title: string;
   location: string | null;
   positions: number;
@@ -73,7 +77,8 @@ export function JobOpeningsBoard({
   users: TeamUser[];
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"all" | "OPEN" | "CLOSED">("all");
+  // Closed openings are hidden by default — they stay reachable via this filter.
+  const [status, setStatus] = useState<"all" | "OPEN" | "CLOSED">("OPEN");
   const [assignee, setAssignee] = useState<string>("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [view, setView] = useState<"card" | "table">("card");
@@ -105,7 +110,12 @@ export function JobOpeningsBoard({
     return sorted;
   }, [openings, status, assignee, sort]);
 
-  const filtersActive = status !== "all" || assignee !== "all";
+  const closedCount = useMemo(
+    () => openings.filter((o) => o.status === "CLOSED").length,
+    [openings],
+  );
+
+  const filtersActive = status !== "OPEN" || assignee !== "all";
 
   return (
     <div className="space-y-4">
@@ -157,12 +167,24 @@ export function JobOpeningsBoard({
             size="sm"
             className="text-muted-foreground"
             onClick={() => {
-              setStatus("all");
+              setStatus("OPEN");
               setAssignee("all");
             }}
           >
             <X />
             Reset
+          </Button>
+        )}
+
+        {status === "OPEN" && closedCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setStatus("CLOSED")}
+          >
+            <Archive />
+            {closedCount} closed hidden
           </Button>
         )}
 
@@ -192,7 +214,17 @@ export function JobOpeningsBoard({
             <div className="rounded-full bg-muted p-4">
               <SearchX className="size-8 text-muted-foreground" />
             </div>
-            <p className="font-medium">No openings match these filters</p>
+            <p className="font-medium">
+              {status === "OPEN" && closedCount > 0 && !openings.some((o) => o.status === "OPEN")
+                ? "No open openings"
+                : "No openings match these filters"}
+            </p>
+            {status === "OPEN" && closedCount > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setStatus("CLOSED")}>
+                <Archive className="size-4" />
+                View {closedCount} closed
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : view === "table" ? (
@@ -200,6 +232,7 @@ export function JobOpeningsBoard({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-28">Ref</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Location</TableHead>
@@ -215,14 +248,20 @@ export function JobOpeningsBoard({
                 const assignedUser = opening.assignedToId
                   ? userById.get(opening.assignedToId)
                   : undefined;
-                const passed =
-                  opening.closureDeadline && deadlinePassed(opening.closureDeadline);
+                // A closed opening's countdown is meaningless — show the date only.
+                const deadline =
+                  opening.closureDeadline && !closed
+                    ? deadlineInfo(opening.closureDeadline)
+                    : null;
                 return (
                   <TableRow
                     key={opening.id}
                     className="cursor-pointer"
                     onClick={() => router.push(`/job-openings/${opening.id}`)}
                   >
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {formatJobRef(opening.refNumber)}
+                    </TableCell>
                     <TableCell className="font-medium">{opening.title}</TableCell>
                     <TableCell>
                       <Badge variant={closed ? "secondary" : "default"}>
@@ -238,11 +277,21 @@ export function JobOpeningsBoard({
                     <TableCell className="text-muted-foreground">
                       {assignedUser ? assignedUser.name : "Unassigned"}
                     </TableCell>
-                    <TableCell className={cn(passed && "font-medium text-destructive")}>
+                    <TableCell>
                       {opening.closureDeadline ? (
-                        <span className="inline-flex items-center gap-1">
-                          {passed && <AlertTriangle className="size-3.5" />}
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1",
+                            deadline && DEADLINE_URGENCY_CLASS[deadline.urgency],
+                          )}
+                        >
+                          {deadline?.urgency === "passed" && (
+                            <AlertTriangle className="size-3.5" />
+                          )}
                           {deadlineFmt.format(new Date(opening.closureDeadline))}
+                          {deadline && (
+                            <span className="text-xs">· {deadline.label}</span>
+                          )}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -266,6 +315,10 @@ export function JobOpeningsBoard({
             const assignedUser = opening.assignedToId
               ? userById.get(opening.assignedToId)
               : undefined;
+            const deadline =
+              opening.closureDeadline && !closed
+                ? deadlineInfo(opening.closureDeadline)
+                : null;
 
             return (
               <Link key={opening.id} href={`/job-openings/${opening.id}`}>
@@ -277,7 +330,12 @@ export function JobOpeningsBoard({
                 >
                   <CardHeader className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <h2 className="font-semibold leading-snug">{opening.title}</h2>
+                      <div className="min-w-0 space-y-0.5">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {formatJobRef(opening.refNumber)}
+                        </span>
+                        <h2 className="font-semibold leading-snug">{opening.title}</h2>
+                      </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {assignedUser ? (
                           <Tooltip>
@@ -312,14 +370,14 @@ export function JobOpeningsBoard({
                         <span
                           className={cn(
                             "inline-flex items-center gap-1",
-                            deadlinePassed(opening.closureDeadline) &&
-                              "font-medium text-destructive",
+                            deadline && DEADLINE_URGENCY_CLASS[deadline.urgency],
                           )}
                         >
-                          {deadlinePassed(opening.closureDeadline) && (
+                          {deadline?.urgency === "passed" && (
                             <AlertTriangle className="size-3.5" />
                           )}
                           Closes {deadlineFmt.format(new Date(opening.closureDeadline))}
+                          {deadline && <span>· {deadline.label}</span>}
                         </span>
                       )}
                     </div>
@@ -364,10 +422,6 @@ export function JobOpeningsBoard({
       )}
     </div>
   );
-}
-
-function deadlinePassed(iso: string): boolean {
-  return new Date(iso).getTime() < Date.now();
 }
 
 function countByStage(stages: Stage[]): Record<Stage, number> {

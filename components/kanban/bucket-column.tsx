@@ -21,10 +21,12 @@ export function BucketColumn({
   stage,
   candidates,
   hint,
+  onOpen,
 }: {
   stage: Stage;
   candidates: BoardCandidate[];
   hint: string;
+  onOpen?: (candidate: BoardCandidate) => void;
 }) {
   const [open, setOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: stage });
@@ -69,10 +71,10 @@ export function BucketColumn({
                 {hint}
               </p>
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid max-h-[50vh] gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
                 {candidates.map((c) => (
                   <div key={c.id} className="space-y-1">
-                    <CandidateCard candidate={c} />
+                    <CandidateCard candidate={c} onOpen={onOpen} />
                     {stage === "REJECTED" && c.rejectionType && (
                       <p className="px-1 text-[11px] text-muted-foreground">
                         {c.rejectionType === "CANDIDATE_DECLINED"

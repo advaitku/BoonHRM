@@ -66,6 +66,7 @@ export default async function JobOpeningsPage() {
         <JobOpeningsBoard
           openings={openings.map((o) => ({
             id: o.id,
+            refNumber: o.refNumber,
             title: o.title,
             location: o.location,
             positions: o.positions,

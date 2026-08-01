@@ -128,12 +128,20 @@ enum MailDirection {
 // ---------------------------------------------------------------------------
 
 model JobOpening {
-  id                   String     @id @default(cuid())
+  id String @id @default(cuid())
+  // Human-readable sequential reference (rendered as BOON-014 by lib/job-ref.ts)
+  // and the public URL segment at /jobs/BOON-014. Real MySQL AUTO_INCREMENT on a
+  // non-PK column, which MySQL permits for one column provided it is indexed.
+  refNumber            Int        @unique @default(autoincrement())
   title                String
+  // Sanitized rich-text HTML (see lib/rich-text.ts). NOTE: if this is ever added
+  // to an email template it must bypass escapeHtml/nl2br in lib/email/templates.ts.
   description          String?    @db.Text
   location             String?
   positions            Int        @default(1)
   status               JobStatus  @default(OPEN)
+  // null = not publicly listed. Doubles as the "Posted on" date on the public page.
+  publishedAt          DateTime?
   onlineInterviewUrl   String?    @db.Text
   inPersonInterviewUrl String?    @db.Text
   autoNotify           Boolean    @default(true)

@@ -40,19 +40,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BOON_CONTACT } from "@/lib/brand";
 
 interface OfferFlowProps {
   token: string;
   companyName: string;
 }
-
-// Public-facing Boon contact details shown on the offer page footer.
-const BOON_CONTACT = {
-  website: "https://helloboon.com",
-  websiteLabel: "helloboon.com",
-  email: "hr@helloboon.com",
-  phone: "+91 92893 45544",
-} as const;
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("en-IN", {

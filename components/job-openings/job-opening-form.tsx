@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Briefcase, Link2, MapPin } from "lucide-react";
+import { Briefcase, Globe, Link2, MapPin } from "lucide-react";
 import {
   createJobOpening,
   updateJobOpening,
@@ -12,8 +12,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { Switch } from "@/components/ui/switch";
+import { CopyLink } from "@/components/candidates/copy-link";
 import { Separator } from "@/components/ui/separator";
 import {
   Card,
@@ -41,6 +43,7 @@ export interface JobOpeningFormValues {
   autoNotify: boolean;
   closureDeadline: string; // yyyy-mm-dd
   interviewDeadline: string; // yyyy-mm-dd
+  published: boolean;
 }
 
 const DEFAULTS: JobOpeningFormValues = {
@@ -54,27 +57,36 @@ const DEFAULTS: JobOpeningFormValues = {
   autoNotify: true,
   closureDeadline: "",
   interviewDeadline: "",
+  // Off by default — confidential roles must never become public by accident.
+  published: false,
 };
 
 export function JobOpeningForm({
   openingId,
   initial,
+  publicUrl,
 }: {
   openingId?: string;
   initial?: Partial<JobOpeningFormValues>;
+  /** Absolute public URL — resolved server-side (see lib/job-ref.ts). */
+  publicUrl?: string;
 }) {
   const router = useRouter();
   const values = { ...DEFAULTS, ...initial };
   const [status, setStatus] = useState<"OPEN" | "CLOSED">(values.status);
   const [autoNotify, setAutoNotify] = useState(values.autoNotify);
+  const [published, setPublished] = useState(values.published);
   const [pending, startTransition] = useTransition();
   const editing = Boolean(openingId);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // DatePicker and RichTextEditor render hidden inputs, so FormData already
+    // has them — only these Switch/Select values need setting explicitly.
     const formData = new FormData(e.currentTarget);
     formData.set("status", status);
     formData.set("autoNotify", String(autoNotify));
+    formData.set("published", String(published));
 
     startTransition(async () => {
       const result: ActionResult = editing
@@ -163,11 +175,11 @@ export function JobOpeningForm({
 
           <div className="space-y-2">
             <Label htmlFor="closureDeadline">Position closure deadline</Label>
-            <Input
+            <DatePicker
               id="closureDeadline"
               name="closureDeadline"
-              type="date"
               defaultValue={values.closureDeadline}
+              placeholder="No deadline"
             />
             <p className="text-xs text-muted-foreground">
               Shown on the opening card, flagged red once it passes.
@@ -176,13 +188,15 @@ export function JobOpeningForm({
 
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="description">Description</Label>
-            <Textarea
+            <RichTextEditor
               id="description"
               name="description"
-              placeholder="Responsibilities, requirements, notes for the hiring team…"
               defaultValue={values.description}
-              rows={5}
+              placeholder="Responsibilities, requirements, what a great candidate looks like…"
             />
+            <p className="text-xs text-muted-foreground">
+              Shown on the public job page when this opening is published.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -222,11 +236,11 @@ export function JobOpeningForm({
 
           <div className="space-y-2">
             <Label htmlFor="interviewDeadline">Complete interview by</Label>
-            <Input
+            <DatePicker
               id="interviewDeadline"
               name="interviewDeadline"
-              type="date"
               defaultValue={values.interviewDeadline}
+              placeholder="No deadline"
             />
             <p className="text-xs text-muted-foreground">
               Included in the interview invite email, if set.
@@ -250,6 +264,44 @@ export function JobOpeningForm({
               onCheckedChange={setAutoNotify}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="size-4 text-muted-foreground" />
+            Public listing
+          </CardTitle>
+          <CardDescription>
+            Publish this role to a shareable public page you can link from
+            LinkedIn, WhatsApp or email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="published">Publish to the public job page</Label>
+              <p className="text-sm text-muted-foreground">
+                When on, anyone with the link can view this role. Leave off for
+                confidential openings.
+              </p>
+            </div>
+            <Switch
+              id="published"
+              checked={published}
+              onCheckedChange={setPublished}
+            />
+          </div>
+
+          {published &&
+            (publicUrl ? (
+              <CopyLink url={publicUrl} />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                The public link appears here once the opening is created.
+              </p>
+            ))}
         </CardContent>
       </Card>
 

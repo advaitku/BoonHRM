@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings2,
+  Users,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { getInitials } from "@/lib/initials";
@@ -46,6 +47,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
   const items = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Job Openings", url: "/job-openings", icon: Briefcase },
+    { title: "Candidates", url: "/candidates", icon: Users },
     ...(admin
       ? [{ title: "Settings", url: "/admin/settings", icon: Settings2 }]
       : []),

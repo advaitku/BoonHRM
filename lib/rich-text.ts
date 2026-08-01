@@ -81,7 +81,9 @@ export function isRichTextEmpty(html: string | null | undefined): boolean {
 
 /** Strip to plain text for meta descriptions / previews. */
 export function richTextToPlainText(html: string, maxLength?: number): string {
-  const text = sanitizeHtml(html, { allowedTags: [], allowedAttributes: {} })
+  // Space between adjacent tags so "<h2>Role</h2><p>Own…" doesn't collapse
+  // into "RoleOwn…" once the tags are stripped.
+  const text = sanitizeHtml(html.replace(/></g, "> <"), { allowedTags: [], allowedAttributes: {} })
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")

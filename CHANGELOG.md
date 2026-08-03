@@ -7,6 +7,18 @@ identified at a glance.
 
 ## [Unreleased]
 
+### Added
+- **Boon Jobs landing page** at `/` — a public page listing all published open
+  roles (each linking to its `/jobs/BOON-XXX` page), with a login button
+  top-left, a "We're hiring" hero, and a brand footer (helloboon.com, phone,
+  copyright). Shows a friendly empty state when nothing is published.
+
+### Changed
+- Visiting the bare domain no longer auto-redirects: signed-out visitors see
+  the landing page (previously bounced to `/login`), and signed-in users see
+  it too with the top-left button reading **Dashboard** instead of Log in
+  (previously bounced straight to `/dashboard`).
+
 ## [0.5.0] - 2026-08-01
 
 ### Added

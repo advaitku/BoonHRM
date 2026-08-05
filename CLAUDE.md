@@ -7,6 +7,14 @@ approvals) via the company's Microsoft 365 mailbox. Deploys to a single AWS
 Lightsail instance managed with Plesk. See `docs/PLAN.md`-equivalent at
 `~/.claude/plans/i-want-to-make-elegant-kahan.md` for the full spec.
 
+**Tenancy direction**: today this is a single-company internal tool (Boon), but
+the long-term plan is to offer it to multiple companies (multi-tenant). Until
+that lands: keep company-specific values (name, emails, agreement text, mail
+creds) in `AppSetting`/env — never hardcoded in features; avoid designs that
+assume "there is exactly one company" any harder than they must (e.g. new
+config belongs in settings, new global pages should be scoped-per-workspace in
+spirit); a future migration will add a company/tenant scope to domain tables.
+
 ## Stack
 
 - **Next.js 15** (App Router, TypeScript, Turbopack) — persistent Node server (not serverless).

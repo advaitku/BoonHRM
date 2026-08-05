@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Briefcase,
+  Gauge,
   LayoutDashboard,
   LogOut,
   Settings2,
@@ -49,7 +50,10 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
     { title: "Job Openings", url: "/job-openings", icon: Briefcase },
     { title: "Candidates", url: "/candidates", icon: Users },
     ...(admin
-      ? [{ title: "Settings", url: "/admin/settings", icon: Settings2 }]
+      ? [
+          { title: "Command Center", url: "/admin/command-center", icon: Gauge },
+          { title: "Settings", url: "/admin/settings", icon: Settings2 },
+        ]
       : []),
   ];
 

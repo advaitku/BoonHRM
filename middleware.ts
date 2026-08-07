@@ -20,6 +20,7 @@ export const config = {
     "/job-openings/:path*",
     "/candidates/:path*",
     "/admin/:path*",
+    "/command-center/:path*",
     "/inbox/:path*",
   ],
 };

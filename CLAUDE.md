@@ -81,7 +81,7 @@ DB `boonhrm`, user `boon` / `bo0nhrm_dev` (see `.env` `DATABASE_URL`). Client:
 - **Path alias** `@/*` → repo root. Inside `lib/prisma.ts`, the generated client is imported by **relative** path (`./generated/prisma/client`) so `tsx` scripts resolve it without alias config.
 - **UI**: shadcn components only. No other component libraries. Icons from `lucide-react`.
 - **Route groups**: `(auth)` (login), `(app)` (authenticated shell), `(public)` (token-gated pages, no session).
-- **Roles** are the string `role` on the Better Auth `user` row: `"admin"` | `"hr"`.
+- **Roles** are the string `role` on the Better Auth `user` row: `"superadmin"` | `"admin"` | `"hr"`. Superadmin is the platform operator (not creatable from the UI — `npx tsx scripts/make-superadmin.ts <email>`): passes every admin check (`isAdmin`/`requireAdmin`) and is the only role allowed into the standalone `/command-center` area (route group `(superadmin)`, own layout, gated by `requireSuperAdmin`).
 
 ## Env
 

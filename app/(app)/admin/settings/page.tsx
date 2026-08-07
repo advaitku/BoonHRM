@@ -134,8 +134,18 @@ export default async function SettingsPage() {
                       {u.email}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={u.role === "admin" ? "default" : "secondary"}>
-                        {u.role === "admin" ? "Admin" : "HR"}
+                      <Badge
+                        variant={
+                          u.role === "admin" || u.role === "superadmin"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {u.role === "superadmin"
+                          ? "Super admin"
+                          : u.role === "admin"
+                            ? "Admin"
+                            : "HR"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -146,12 +156,14 @@ export default async function SettingsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <UserRowActions
-                        userId={u.id}
-                        role={u.role}
-                        banned={u.banned}
-                        isSelf={u.id === session.user.id}
-                      />
+                      {u.role === "superadmin" ? null : (
+                        <UserRowActions
+                          userId={u.id}
+                          role={u.role}
+                          banned={u.banned}
+                          isSelf={u.id === session.user.id}
+                        />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

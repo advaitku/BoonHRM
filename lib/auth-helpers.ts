@@ -20,12 +20,22 @@ export async function requireUser() {
   return session;
 }
 
+// "superadmin" is the platform operator (us), above per-company admins. It
+// passes every admin check and is the only role allowed into /command-center.
+// Not creatable from the UI — assigned via `npx tsx scripts/make-superadmin.ts`.
+
 export async function requireAdmin() {
   const session = await requireUser();
-  if (session.user.role !== "admin") redirect("/dashboard");
+  if (!isAdmin(session.user.role)) redirect("/dashboard");
+  return session;
+}
+
+export async function requireSuperAdmin() {
+  const session = await requireUser();
+  if (session.user.role !== "superadmin") redirect("/dashboard");
   return session;
 }
 
 export function isAdmin(role: string | null | undefined): boolean {
-  return role === "admin";
+  return role === "admin" || role === "superadmin";
 }

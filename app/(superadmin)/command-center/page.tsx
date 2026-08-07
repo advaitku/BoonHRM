@@ -8,7 +8,7 @@ import {
   Send,
   Users as UsersIcon,
 } from "lucide-react";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireSuperAdmin } from "@/lib/auth-helpers";
 import { prisma } from "@/lib/prisma";
 import {
   SETTING_KEYS,
@@ -37,12 +37,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const ACTIVITY_LIMIT = 50;
 const EMAIL_LIMIT = 50;
 
-/** Global admin view: recent workflow activity and email traffic across every
- * opening, plus a read-only configuration overview. Single-workspace today —
- * when BoonHRM goes multi-company this becomes the per-company (or cross-
- * company, for a super-admin) operations page. */
+/** Super-admin-only platform view: recent workflow activity and email traffic
+ * across every opening, plus a read-only configuration overview. Lives outside
+ * the (app) shell on purpose — single-workspace today, this becomes the
+ * cross-company operator console when BoonHRM goes multi-tenant. */
 export default async function CommandCenterPage() {
-  await requireAdmin();
+  await requireSuperAdmin();
 
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
@@ -162,10 +162,10 @@ export default async function CommandCenterPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Command Center</h1>
+          <h1 className="text-2xl font-semibold">Platform overview</h1>
           <p className="text-muted-foreground">
-            Global workflow activity, email traffic and configuration — visible
-            to admins only.
+            Global workflow activity, email traffic and configuration across
+            the workspace.
           </p>
         </div>
         <Button asChild variant="outline" size="sm">

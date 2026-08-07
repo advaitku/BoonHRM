@@ -16,6 +16,7 @@
     "migrate:recover-offer": "prisma migrate resolve --rolled-back 20260715090000_offer_acceptance",
     "migrate:resolve-split": "prisma migrate resolve --applied 20260730140000_split_candidate_application",
     "seed": "tsx prisma/seed.ts",
+    "superadmin": "tsx scripts/make-superadmin.ts",
     "mail:test": "tsx scripts/mail-test.ts",
     "login:diag": "tsx scripts/login-diag.ts"
   },

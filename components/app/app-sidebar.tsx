@@ -43,17 +43,15 @@ export interface SidebarUser {
 export function AppSidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
   const router = useRouter();
-  const admin = user.role === "admin";
+  const admin = user.role === "admin" || user.role === "superadmin";
+  const superadmin = user.role === "superadmin";
 
   const items = [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Job Openings", url: "/job-openings", icon: Briefcase },
     { title: "Candidates", url: "/candidates", icon: Users },
     ...(admin
-      ? [
-          { title: "Command Center", url: "/admin/command-center", icon: Gauge },
-          { title: "Settings", url: "/admin/settings", icon: Settings2 },
-        ]
+      ? [{ title: "Settings", url: "/admin/settings", icon: Settings2 }]
       : []),
   ];
 
@@ -122,7 +120,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                   <div className="grid min-w-0 flex-1 text-left leading-tight">
                     <span className="truncate text-sm font-medium">{user.name}</span>
                     <span className="truncate text-xs opacity-70">
-                      {admin ? "Admin" : "HR"}
+                      {superadmin ? "Super admin" : admin ? "Admin" : "HR"}
                     </span>
                   </div>
                 </SidebarMenuButton>
@@ -135,6 +133,17 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {superadmin && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/command-center">
+                        <Gauge className="size-4" />
+                        Command Center
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={async () => {
                     await signOut();

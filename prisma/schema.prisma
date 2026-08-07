@@ -352,6 +352,24 @@ model EmailMessage {
 // Admin-editable settings
 // ---------------------------------------------------------------------------
 
+// Server-side exceptions captured by instrumentation.ts (onRequestError) so
+// prod errors are inspectable in Command Center → Errors without SSH. The
+// digest matches the code Next.js shows on the user-facing 500 page. Rows
+// older than 14 days are pruned on write.
+model ErrorLog {
+  id        String   @id @default(cuid())
+  digest    String? // Next.js error digest from the 500 page
+  message   String   @db.Text
+  stack     String?  @db.Text
+  url       String?  @db.Text
+  method    String?
+  routePath String?
+  routeType String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model AppSetting {
   key       String   @id // e.g. "companyName", "autoRejectDays"
   value     String   @db.Text

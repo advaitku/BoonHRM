@@ -46,6 +46,13 @@ export async function setUserRole(
   if (session.user.id === userId && role !== "admin") {
     return { ok: false, error: "You cannot remove your own admin role" };
   }
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return { ok: false, error: "User not found" };
+  // Superadmin is assigned via scripts/make-superadmin.ts only — never from
+  // the UI, and never removable by a regular admin.
+  if (target.role === "superadmin") {
+    return { ok: false, error: "Super admin accounts are managed outside the app" };
+  }
   await prisma.user.update({ where: { id: userId }, data: { role } });
   revalidatePath("/admin/users");
   return { ok: true };
@@ -58,6 +65,9 @@ export async function toggleUserBanned(userId: string): Promise<ActionResult> {
   }
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { ok: false, error: "User not found" };
+  if (user.role === "superadmin") {
+    return { ok: false, error: "Super admin accounts are managed outside the app" };
+  }
 
   await prisma.user.update({
     where: { id: userId },
